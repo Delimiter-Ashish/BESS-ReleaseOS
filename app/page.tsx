@@ -37,6 +37,7 @@ export default function Home() {
   const rels = getReleases();
   const staleRel = rels.filter((r) => { const s = sites.find((x) => x.id === r.siteId)!; return r.number === Math.max(...rels.filter((y) => y.siteId === r.siteId && y.templateId === r.templateId).map((y) => y.number)) && releaseStatus(s, r).state === "stale"; }).length;
   const openReviews = getReviews().filter((r) => r.status === "open").length;
+  const openDeps = sites.reduce((n, s) => n + (s.engTasks ?? []).filter((t) => t.status === "open").length, 0);
   const totalMwh = sites.reduce((n, s) => n + s.energyKwh, 0) / 1000;
 
   const actionItems = evals
@@ -67,7 +68,7 @@ export default function Home() {
             { k: "Documents tracked", v: totalDocs.toLocaleString(), sub: "revisions across 11 lifecycle stages" },
             { k: "Open issues", v: openIssues, sub: "missing · outdated · overdue", tone: "text-red-600" },
             { k: "Sites needing action", v: red, sub: `${Math.round((red / sites.length) * 100)}% of portfolio`, tone: "text-orange-600" },
-            { k: "Awaiting engineer review", v: openReviews, sub: `${staleRel} package(s) stale · ${dueSoon} due soon`, tone: "text-violet-600" },
+            { k: "Engineering review", v: openReviews + openDeps, sub: `${openReviews} revision(s) · ${openDeps} dependency review(s) · ${staleRel} stale package(s) · ${dueSoon} due soon`, tone: "text-violet-600" },
           ].map((t) => (
             <div key={t.k} className="card p-4">
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{t.k}</div>

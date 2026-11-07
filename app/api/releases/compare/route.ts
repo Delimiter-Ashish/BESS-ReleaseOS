@@ -5,6 +5,7 @@ import { compareSnapshots } from "@/lib/release";
 import { getRelease, StoreError } from "@/lib/store";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /** Compare two historical releases from their frozen snapshots: ?from=R1id&to=R2id */
 export async function GET(req: Request) {

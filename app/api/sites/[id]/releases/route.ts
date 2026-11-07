@@ -6,6 +6,7 @@ import { PACKAGE_TEMPLATES } from "@/lib/requirements";
 import { buildRelease, getSite, StoreError } from "@/lib/store";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /** Readiness for every package (deterministic gate + optimistic token). */
 export async function GET(req: Request, { params }: { params: { id: string } }) {

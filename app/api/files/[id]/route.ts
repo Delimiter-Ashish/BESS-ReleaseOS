@@ -3,6 +3,7 @@ import { handle } from "@/lib/http";
 import { getFile, StoreError } from "@/lib/store";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /** Original uploaded bytes (signed-in roles only). Served as an attachment to avoid rendering untrusted content inline. */
 export async function GET(req: Request, { params }: { params: { id: string } }) {

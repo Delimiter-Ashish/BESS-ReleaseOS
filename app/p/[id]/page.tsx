@@ -1,16 +1,16 @@
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import RoleLogin from "@/components/RoleLogin";
 import { STATUS_META, canSee, evaluateSite } from "@/lib/compliance";
 import { ROLE_LABEL, type Role } from "@/lib/requirements";
 import { getSite } from "@/lib/store";
+import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default function PublicSitePage({ params }: { params: { id: string } }) {
   const site = getSite(params.id);
   if (!site) notFound();
-  const role = (cookies().get("role")?.value as Role) || "public";
+  const role: Role = getSession().role;
   const ev = evaluateSite(site);
   const visible = ev.states.filter((s) => canSee(s.req, role));
   const om = ev.states.find((s) => s.req.id === "om_manual");

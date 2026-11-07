@@ -4,6 +4,7 @@ import { handle } from "@/lib/http";
 import { getRelease, releaseZip, StoreError } from "@/lib/store";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * Frozen release download. Everything comes from the sealed snapshot captured at build time.

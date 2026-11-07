@@ -4,31 +4,37 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { AppHeader } from "@/components/AppHeader";
 import BuildRelease from "@/components/BuildRelease";
+import EngineeringTasks, { type TaskView } from "@/components/EngineeringTasks";
 import ReviewPanel, { type ReviewView } from "@/components/ReviewPanel";
 import UploadPanel from "@/components/UploadPanel";
+import { can, getSession } from "@/lib/auth";
 import { STATUS_META, evaluateSite } from "@/lib/compliance";
 import { PACKAGE_TEMPLATES, REQ_BY_ID, ROLE_LABEL, STAGES, stageIndex } from "@/lib/requirements";
-import { latestRelease, packageReadiness, releaseStatus, revisionsOf } from "@/lib/release";
-import { getReleases, getReviews, getSite } from "@/lib/store";
+import { latestApproved, latestRelease, packageReadiness, releaseStatus, revisionsOf } from "@/lib/release";
+import { getDecisions, getReleases, getReviews, getSite, storeStartedAt } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 const ROLE_SHORT = { public: "Public", ahj: "AHJ", facility: "Facility", eqore: "EQORE", supplier: "Supplier" } as const;
 const ITEM_META = {
-  ready: { icon: "✓", cls: "text-emerald-600" },
-  missing: { icon: "✕", cls: "text-red-600" },
-  in_review: { icon: "◷", cls: "text-violet-600" },
-  needs_eng_review: { icon: "!", cls: "text-orange-600" },
+  ready: { icon: "✓", cls: "text-emerald-600", label: "" },
+  missing: { icon: "✕", cls: "text-red-600", label: "missing" },
+  in_review: { icon: "◷", cls: "text-violet-600", label: "awaiting first approval" },
+  pending_change: { icon: "◷", cls: "text-violet-600", label: "revision pending review" },
+  needs_eng_review: { icon: "!", cls: "text-orange-600", label: "dependency review open" },
 } as const;
 const REL_META = {
   current: { label: "Current", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   pending_change: { label: "Change pending review", cls: "bg-amber-50 text-amber-800 ring-amber-200" },
-  stale: { label: "STALE — rebuild required", cls: "bg-red-50 text-red-700 ring-red-200" },
+  stale: { label: "Stale — rebuild required", cls: "bg-red-50 text-red-700 ring-red-200" },
 } as const;
+const name = (rid: string) => REQ_BY_ID[rid]?.name ?? rid;
 
 export default async function SitePage({ params }: { params: { id: string } }) {
   const site = getSite(params.id);
   if (!site) notFound();
+  const session = getSession();
+  const canReview = can(session, "review");
   const ev = evaluateSite(site);
   const si = stageIndex(site.stage);
   const releases = getReleases(site.id);
@@ -37,6 +43,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
   const host = process.env.PUBLIC_BASE_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const qrUrl = `${host}/p/${site.id}`;
   const qr = await QRCode.toDataURL(qrUrl, { margin: 1, width: 220 });
+  const engTasks = site.engTasks ?? [];
 
   const reviews: ReviewView[] = getReviews(site.id)
     .filter((r) => r.status === "open")
@@ -44,37 +51,38 @@ export default async function SitePage({ params }: { params: { id: string } }) {
       const rev = site.documents.find((d) => d.id === r.revisionId)!;
       const prev = r.previousRevisionId ? site.documents.find((d) => d.id === r.previousRevisionId) : undefined;
       return {
-        id: r.id,
-        docName: REQ_BY_ID[r.requirementId]?.name ?? r.requirementId,
-        revLabel: rev.revLabel,
-        prevLabel: prev?.revLabel,
-        fileName: rev.fileName,
-        uploadedBy: rev.uploadedBy,
-        uploadedAt: rev.uploadedAt,
-        engine: rev.engine,
-        synthetic: rev.synthetic,
-        changes: r.changes,
-        affectedReleases: r.affectedReleaseIds.map((id) => {
-          const rel = releases.find((x) => x.id === id);
-          return rel ? `${PACKAGE_TEMPLATES.find((t) => t.id === rel.templateId)?.name} R${rel.number}` : id;
-        }),
-        affectedDocs: r.affectedRequirementIds.filter((d) => revisionsOf(site, d).length).map((d) => REQ_BY_ID[d]?.name ?? d),
+        id: r.id, siteId: site.id, revisionId: rev.id, docName: name(r.requirementId), revLabel: rev.revLabel, prevLabel: prev?.revLabel,
+        fileName: rev.fileName, uploadedBy: rev.uploadedBy, uploadedAt: rev.uploadedAt, engine: rev.engine, model: rev.model, synthetic: rev.synthetic,
+        changes: r.changes, materialCount: r.materialChangeCount ?? r.changes.filter((c) => c.significance === "material").length,
+        aiSummary: r.aiSummary, aiSummarySource: r.aiSummarySource,
+        affectedReleases: r.affectedReleaseIds.map((id) => { const rel = releases.find((x) => x.id === id); return rel ? `${PACKAGE_TEMPLATES.find((t) => t.id === rel.templateId)?.name} R${rel.number}` : id; }),
+        raisedTasks: engTasks.filter((t) => t.sourceRevisionId === rev.id).map((t) => ({ id: t.id, dependent: name(t.dependentRequirementId), status: t.status })),
+        missingDependents: (r.potentiallyAffectedMissing ?? []).map(name),
+        resolvable: engTasks.filter((t) => t.status === "open" && t.dependentRequirementId === rev.requirementId).map((t) => ({ id: t.id, source: name(t.sourceRequirementId), explanation: t.explanation, sourceApproved: latestApproved(site, t.sourceRequirementId)?.id === t.sourceRevisionId })),
+        selfUpload: !!rev.uploadedById && rev.uploadedById === session.userId,
+        warnings: (rev.extractionWarnings ?? []).filter((w) => /embedded instructions|fallback/i.test(w)),
       };
     });
 
+  const tasks: TaskView[] = engTasks.filter((t) => t.status !== "superseded").map((t) => {
+    const src = site.documents.find((d) => d.id === t.sourceRevisionId);
+    const dep = t.dependentRevisionId ? site.documents.find((d) => d.id === t.dependentRevisionId) : undefined;
+    return { id: t.id, source: name(t.sourceRequirementId), sourceRev: src?.revLabel ?? "?", sourceApproved: src?.status === "approved" && latestApproved(site, t.sourceRequirementId)?.id === src.id, dependent: name(t.dependentRequirementId), dependentRev: dep?.revLabel, changedKeys: t.changedKeys, explanation: t.explanation, aiImpact: t.aiImpact, status: t.status, resolvedBy: t.resolvedBy, resolvedAt: t.resolvedAt, resolution: t.resolution, resolutionNote: t.resolutionNote };
+  });
+
   const packages = PACKAGE_TEMPLATES.map((t) => {
     const ready = packageReadiness(site, t);
+    const all = releases.filter((r) => r.templateId === t.id).sort((a, b) => b.number - a.number);
     const last = latestRelease(releases, site.id, t.id);
-    return { t, ready, last, status: last ? releaseStatus(site, last) : undefined };
+    return { t, ready, last, all, status: last ? releaseStatus(site, last) : undefined };
   });
+  const audit = getDecisions(site.id).filter((d) => !d.seeded).slice().reverse();
 
   return (
     <>
       <AppHeader />
-      <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
-        <div className="text-sm text-slate-500">
-          <Link href="/" className="hover:underline">Portfolio</Link> / {site.id}
-        </div>
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+        <div className="text-sm text-slate-500"><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</div>
 
         <section className="card flex flex-wrap items-start justify-between gap-6 p-5">
           <div className="space-y-1">
@@ -103,17 +111,69 @@ export default async function SitePage({ params }: { params: { id: string } }) {
           </div>
         </section>
 
-        <ReviewPanel reviews={reviews} />
+        {/* Readiness at a glance */}
+        <section className="grid gap-3 md:grid-cols-3">
+          {packages.map(({ t, ready, last, status }) => (
+            <a key={t.id} href={`#pkg-${t.id}`} className={`card flex items-center justify-between gap-3 p-3 transition hover:shadow ${ready.canBuild ? "border-emerald-200" : "border-red-200"}`}>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">{t.name}</div>
+                <div className="text-xs text-slate-500">{ready.readyCount}/{ready.items.length} ready{last ? ` · latest R${last.number}` : " · no release yet"}</div>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className={`pill ${ready.canBuild ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-red-50 text-red-700 ring-red-200"}`}>{ready.canBuild ? "Ready for signoff" : `${ready.issues.length} blocker${ready.issues.length === 1 ? "" : "s"}`}</span>
+                {status && <span className={`pill ${REL_META[status.state].cls}`}>R{last!.number}: {REL_META[status.state].label}</span>}
+              </div>
+            </a>
+          ))}
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <UploadPanel siteId={site.id} canUpload={can(session, "upload")} userName={session.name} />
+            <ReviewPanel reviews={reviews} canReview={canReview} userName={session.name} />
+            <EngineeringTasks siteId={site.id} tasks={tasks} canReview={canReview} />
+          </div>
+          <aside className="space-y-4">
+            <div className="card p-4">
+              <div className="text-sm font-semibold">Audit trail</div>
+              <p className="mb-2 text-[11px] text-slate-500">Human decisions recorded with server-side identity.</p>
+              {audit.length === 0 ? (
+                <div className="text-xs text-slate-500">No decisions since the demo started ({storeStartedAt().slice(11, 16)} UTC). Seeded history is included in release snapshots.</div>
+              ) : (
+                <ol className="relative space-y-3 border-l border-slate-200 pl-4">
+                  {audit.slice(0, 12).map((d) => (
+                    <li key={d.id} className="text-xs">
+                      <span className={`absolute -left-[5px] mt-1 h-2.5 w-2.5 rounded-full ${d.decision === "rejected" ? "bg-red-500" : d.kind === "release_signoff" ? "bg-indigo-500" : "bg-emerald-500"}`} />
+                      <div className="font-medium text-slate-800">{d.kind === "revision_review" ? `Revision ${d.decision}` : d.kind === "dependency_resolution" ? "Dependency review resolved" : `Release signed off (${d.releaseId?.split("-").pop()})`}</div>
+                      <div className="text-slate-500">{d.reviewerName} · {d.at.slice(11, 19)} UTC</div>
+                      {d.revisionId && <div className="text-slate-500">{name(site.documents.find((x) => x.id === d.revisionId)?.requirementId ?? "")} Rev {site.documents.find((x) => x.id === d.revisionId)?.revLabel}</div>}
+                      <div className="italic text-slate-600">“{d.note}”</div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+            <div className="card p-4 text-xs text-slate-500">
+              <div className="mb-1 text-sm font-semibold text-slate-800">How decisions are made</div>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>AI extracts facts and explains possible impacts. It never approves, resolves or releases.</li>
+                <li>Material changes and dependency reviews block new releases until an authorized engineer records a decision.</li>
+                <li>Releases freeze approved bytes, hashes and approvals. Older releases are never modified.</li>
+                <li>In-memory demo store: restarting the server resets to seed data.</li>
+              </ul>
+            </div>
+          </aside>
+        </div>
 
         {/* Submission packages */}
         <section>
-          <div className="mb-2 flex items-baseline justify-between">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-lg font-semibold">Submission packages</h2>
             <span className="text-xs text-slate-500">Version-locked: only approved revisions, pinned by SHA-256. Checklists illustrative until EQORE confirms.</span>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
-            {packages.map(({ t, ready, last, status }) => (
-              <div key={t.id} className="card flex flex-col p-4">
+            {packages.map(({ t, ready, last, all, status }) => (
+              <div key={t.id} id={`pkg-${t.id}`} className="card flex flex-col p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="font-semibold">{t.name}</div>
@@ -131,7 +191,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
                           {i.approved ? ` · Rev ${i.approved.revLabel}` : ""}
                           {i.pending ? ` · Rev ${i.pending.revLabel} in review` : ""}
                         </span>
-                        {i.flags.map((f) => <span key={f} className="block text-xs text-orange-700">{f}</span>)}
+                        {ITEM_META[i.state].label && <span className={`block text-xs ${ITEM_META[i.state].cls}`}>{ITEM_META[i.state].label}</span>}
                       </span>
                     </li>
                   ))}
@@ -145,34 +205,33 @@ export default async function SitePage({ params }: { params: { id: string } }) {
                       </div>
                       <div className="text-xs text-slate-500">built {last.builtAt.slice(0, 10)} by {last.builtBy}</div>
                       {status.reasons.map((r) => <div key={r} className="mt-1 text-xs text-slate-700">• {r}</div>)}
-                      <div className="mt-2 flex gap-2 text-xs">
-                        <Link href={`/sites/${site.id}/releases/${last.id}`} className="text-indigo-600 hover:underline">View manifest</Link>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        {all.map((r) => <Link key={r.id} href={`/sites/${site.id}/releases/${r.id}`} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono hover:bg-slate-200">R{r.number}</Link>)}
                         <a href={`/api/releases/${last.id}/download`} className="text-indigo-600 hover:underline">Download ZIP</a>
                       </div>
                     </div>
                   )}
-                  <BuildRelease siteId={site.id} templateId={t.id} nextNumber={(last?.number ?? 0) + 1} canBuild={ready.canBuild} flags={ready.flags} />
-                  {!ready.canBuild && <div className="text-xs text-red-600">Blocked: {ready.blockers.map((b) => b.name).join(", ")}</div>}
+                  <BuildRelease siteId={site.id} templateId={t.id} nextNumber={(last?.number ?? 0) + 1} canBuild={ready.canBuild} canSign={can(session, "release")} token={ready.token} blockers={ready.issues.map((x) => x.message)} />
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <section className="space-y-4 lg:col-span-2">
-            <h2 className="text-lg font-semibold">Lifecycle documents</h2>
-            <div className="flex flex-wrap gap-1.5">
-              {STAGES.map((st, i) => {
-                const states = ev.states.filter((s) => s.req.stage === st.id);
-                const bad = states.filter((s) => ["missing", "outdated", "overdue"].includes(s.status)).length;
-                return (
-                  <div key={st.id} className={`rounded-md px-2 py-1 text-xs ${i === si ? "bg-slate-900 text-white" : i < si ? (bad ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800") : "bg-slate-100 text-slate-400"}`}>
-                    {i + 1}. {st.short}{i <= si && bad ? ` · ${bad}` : ""}
-                  </div>
-                );
-              })}
-            </div>
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">Lifecycle documents</h2>
+          <div className="flex flex-wrap gap-1.5">
+            {STAGES.map((st, i) => {
+              const states = ev.states.filter((s) => s.req.stage === st.id);
+              const bad = states.filter((s) => ["missing", "outdated", "overdue"].includes(s.status)).length;
+              return (
+                <div key={st.id} className={`rounded-md px-2 py-1 text-xs ${i === si ? "bg-slate-900 text-white" : i < si ? (bad ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800") : "bg-slate-100 text-slate-400"}`}>
+                  {i + 1}. {st.short}{i <= si && bad ? ` · ${bad}` : ""}
+                </div>
+              );
+            })}
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
             {STAGES.map((st, gi) => {
               const states = ev.states.filter((s) => s.req.stage === st.id);
               if (!states.length) return null;
@@ -197,9 +256,9 @@ export default async function SitePage({ params }: { params: { id: string } }) {
                                 {revs.map((r) => {
                                   const sup = r.status === "approved" && revs.find((x) => x.status === "approved")?.id !== r.id;
                                   return (
-                                    <span key={r.id} title={`${r.fileName} · sha256 ${r.sha256.slice(0, 12)}…`} className={`rounded px-1.5 py-0.5 text-[11px] ${sup ? "bg-slate-100 text-slate-400 line-through" : r.status === "approved" ? "bg-emerald-50 text-emerald-700" : r.status === "rejected" ? "bg-red-50 text-red-500 line-through" : "bg-violet-50 text-violet-700"}`}>
+                                    <Link key={r.id} href={`/sites/${site.id}/documents/${encodeURIComponent(r.id)}`} title={`${r.fileName} · sha256 ${r.sha256.slice(0, 12)}…`} className={`rounded px-1.5 py-0.5 text-[11px] hover:ring-1 hover:ring-slate-300 ${sup ? "bg-slate-100 text-slate-400 line-through" : r.status === "approved" ? "bg-emerald-50 text-emerald-700" : r.status === "rejected" ? "bg-red-50 text-red-500 line-through" : "bg-violet-50 text-violet-700"}`}>
                                       Rev {r.revLabel} · {sup ? "superseded" : r.status.replace("_", " ")}
-                                    </span>
+                                    </Link>
                                   );
                                 })}
                               </div>
@@ -217,11 +276,8 @@ export default async function SitePage({ params }: { params: { id: string } }) {
                 </div>
               );
             })}
-          </section>
-          <aside className="space-y-4">
-            <UploadPanel siteId={site.id} />
-          </aside>
-        </div>
+          </div>
+        </section>
       </main>
     </>
   );

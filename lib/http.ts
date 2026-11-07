@@ -8,6 +8,8 @@ export async function handle(fn: () => Promise<Response> | Response): Promise<Re
   try {
     return await fn();
   } catch (e) {
+    // Let Next.js control-flow errors (dynamic bailout, redirects, notFound) propagate.
+    if (e && typeof e === "object" && "digest" in e) throw e;
     if (e instanceof AuthError || e instanceof StoreError || e instanceof UploadError) {
       return NextResponse.json({ ok: false, error: e.message, details: e instanceof StoreError ? e.details : undefined }, { status: e.status });
     }

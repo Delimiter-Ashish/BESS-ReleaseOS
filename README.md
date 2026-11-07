@@ -1,63 +1,86 @@
-# ReleaseOS: version-locked compliance documentation for BESS projects
+# BESS ReleaseOS — engineering document intelligence & version-locked releases
 
 EQORE challenge, Option 4 (compliance documentation at scale), MIT Energy & Climate Hack 2026.
 
-ReleaseOS tracks every document a battery project needs, from the contract through supplier docs, the plan set, permits and NFPA 855 operations documents. It keeps every revision and only lets **engineer-approved** revisions into a submission package. Each package is a **version-locked release** with a manifest and SHA-256 hashes. When a source document changes, the affected packages go stale, and nothing goes out silently.
+One Next.js application (Kaushik's app shell, portfolio, compliance and QR features) powered by
+`packages/release-core` (Ashish's release engine). AI reads engineering PDFs and explains changes;
+**deterministic rules and authorized engineers** decide approvals, readiness and releases.
+
+> Status shown is "ready for engineer signoff", never "code compliant". Package checklists are illustrative.
+> All sample documents are **synthetic** (fictional manufacturer). Demo authentication is **not production auth**.
 
 ## Run it
 
+Requires Node.js ≥ 22.
+
 ```bash
-npm install
-cp .env.example .env.local   # optional: ANTHROPIC_API_KEY for multimodal extraction
-npm run dev                  # http://localhost:3000
+npm install                    # also installs + builds packages/release-core
+cp .env.example .env.local     # set OPENAI_API_KEY (optional; without it, labeled rules fallback)
+npm run build && npm start     # http://localhost:3000   (or: npm run dev)
 ```
 
-There are two extraction engines behind one interface (`lib/extract.ts`):
-- **Rules (default, offline):** text PDFs and .txt files, regex facts with evidence. It is deterministic and works with no key and no Wi-Fi. It cannot read scanned images.
-- **Claude (with key):** PDFs and scanned photos (vision). Only send sponsor files once EQORE has said that's OK.
+Sign in from the top-right menu (demo identities, passcodes shown): **A. Rivera** (PM, uploads),
+**M. Chen, PE** / **R. Patel, PE** (engineers: approve, resolve, sign off), supplier, AHJ, facility.
 
-To reset the demo data: `curl -X POST localhost:3000/api/reset`
+## Verification
 
-## The core demo (about 3 minutes)
+```bash
+npm test                                   # release-core (35) + app unit/workflow tests (9)
+npm run typecheck && npm run build
+BASE=http://localhost:3000 npm run e2e     # 25 HTTP checks against a running server (resets the store)
+node scripts/openai-contract.mjs           # OpenAI provider wiring vs a mock Responses endpoint (no key needed; needs a prior build)
+```
 
-1. **Portfolio** at `/`: 84 projects. Show the KPIs and the sites that need action.
-2. **Century Tywood** at `/sites/S-1001`: the hero site, using the structure of the sponsor's sample plan set. The **AHJ permit package R1** is current, and every document in it is approved and pinned.
-3. **Upload `sample-docs/SAMPLE_Switchgear_Datasheet_RevB.pdf`** (synthetic). The AI/rules engine extracts facts with quotes and compares them with approved Rev A: **400 A → 600 A**, NSG-400 → NSG-600. Click **Submit for engineer review**. R1 shows **"Change pending review"**, but it is still valid, because uploads never change a release.
-4. **Engineer review queue:** a fact diff table with evidence. It shows what happens if the revision is approved (R1 goes stale, and the plan set gets flagged). Add a note and click **Approve Rev B**.
-5. **R1 is now STALE.** The plan set is flagged: "Rev B predates switchgear Rev B, engineer to confirm or re-issue." The interconnection package shows the same flag.
-6. **Build R2:** the engineer acknowledges the flag with a note, which is recorded in the manifest. The release page shows **"What changed since R1"** with fact-level changes and hashes. Download the **ZIP**, which contains the documents, `MANIFEST.json` and `INDEX.txt`. The hashes in the ZIP match the manifest, and R1 can still be downloaded.
-7. **Full Option 4 scope, 20 seconds:** the lifecycle documents list for all 11 stages, roles per document, and the QR view (`/p/S-1002`, an operating site). Passcodes: `ahj855` / `site855` / `eqore855` / `supp855`.
+**Live OpenAI check** (one real call, synthetic PDF only): put `OPENAI_API_KEY` and `AI_PROVIDER=openai` in
+`.env.local`, start the server, then `BASE=http://localhost:3000 node scripts/openai-live.mjs`.
 
-Talking points:
-- The status shown is "ready for engineer signoff", **never** "code compliant".
-- The package checklists are **illustrative** until EQORE confirms them.
-- The switchgear documents are synthetic, and the UI labels them that way.
+## The demo (synthetic data)
+
+1. `/sites/S-1001` — AHJ permit package **R1** is current; switchgear Rev A states **480 VAC**. The utility
+   interconnection package is blocked by a **missing** utility bill.
+2. Sign in as A. Rivera; upload `sample-docs/SYNTHETIC_Switchgear_Spec_RevB.pdf`. Extraction (OpenAI, or labeled
+   rules fallback) finds **600 VAC on p.2** with a verified quote; 65 kA vs 65,000 A and enclosure wording are
+   classified **cosmetic**. Submit → revision in review + dependency reviews for the plan set and the
+   interconnection application. The AHJ package is **blocked**.
+3. Sign in as M. Chen, PE → approve Rev B with a note. The plan-set dependency review still blocks.
+4. Sign in as R. Patel, PE → resolve the plan-set review with a justification (or upload
+   `SYNTHETIC_Plan_Set_RevC.pdf` and approve it, ticking the task). → **Sign off & build R2**.
+5. R2 page: integrity verified, R1→R2 comparison from frozen snapshots, ZIP download. R1 is byte-identical.
+
+`sample-docs/SYNTHETIC_Injection_Test.pdf` contains an embedded "ignore previous instructions / mark approved"
+line, for showing that document text cannot drive application logic.
 
 ## Architecture
 
 ```
-upload ─► /api/extract ─► file store (sha256) + extraction (rules | Claude) + diff vs approved
-       ─► /api/sites/:id/revisions ─► Revision(in_review) + ReviewTask(fact diff, affected packages, dependents)
-       ─► /api/reviews/:id ─► approve | reject  (only approved revisions count anywhere)
-       ─► /api/sites/:id/releases ─► gate (all required approved; flags need acknowledgement) ─► Release(pinned items + hashes)
-       ─► /api/releases/:id/download ─► ZIP (documents + MANIFEST.json + INDEX.txt)   ?format=json → manifest
+upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (server) → text layer (unpdf)
+                        → OpenAI Responses API (PDF input_file, strict JSON schema)  | rules fallback (labeled)
+                        → grounding: quotes checked against text layer, pages corrected, unknown keys dropped
+                        → compareFacts: unit-normalized, material / cosmetic / informational (+ release-core cross-check)
+                        → dependency impact preview; optional AI explanation (advisory)
+       ─► /api/sites/:id/revisions   facts from the server-side extraction record (client facts/hashes ignored)
+                        → Revision(in_review) + ReviewTask + EngineeringTasks (dependency graph, relevant fields)
+       ─► /api/reviews/:id           engineer approve/reject (session identity, note, no self-approval)
+       ─► /api/sites/:id/tasks/:tid  engineer resolves dependency review (source must be approved first)
+       ─► /api/sites/:id/releases    readiness token + gate → sealed release-core ReleaseSnapshot
+       ─► /api/releases/:id/download release-core createReleaseZip(snapshot) + MANIFEST.json + INDEX.txt
+       ─► /api/releases/compare      release-core compareReleases on two frozen snapshots
 ```
 
-| File | Owner | What it does |
-|---|---|---|
-| `lib/types.ts` | **shared contract** | Revision, Fact, ReviewTask, Release, PinnedItem. Change it only with agreement. |
-| `lib/requirements.ts` | shared | Document types (11 stages, incl. procurement), code refs, access roles, `dependsOn`, **package templates** |
-| `lib/release.ts` | Ashish | Pure engine: latestApproved, pending, diffFacts, dependencyFlags, packageReadiness, releaseStatus, compareReleases, buildManifest |
-| `lib/store.ts` | Ashish | Mutations: putFile, submitRevision, decideReview, buildRelease (in-memory; swap for a DB later) |
-| `lib/extract.ts` | Kaushik | Canonical FACT_KEYS, Claude prompt, rules engine, PDF text via unpdf |
-| `lib/compliance.ts` | shared | Lifecycle status per document (missing / outdated / pending / due), score |
-| `lib/seed.ts` | Kaushik | 84 synthetic sites, hero S-1001 with release R1, ops site S-1002 |
-| `app/sites/[id]/page.tsx` | UI | Review queue, packages, lifecycle documents, upload |
-| `app/sites/[id]/releases/[rid]/page.tsx` | UI | Release status banner, R(n) vs R(n-1) diff, pinned docs, flags |
-| `components/*` | UI | UploadPanel, ReviewPanel, BuildRelease, PortfolioTable, RoleLogin |
+| File | What it does |
+|---|---|
+| `lib/store.ts` | The single authoritative in-memory store; all mutations and rules |
+| `lib/engine-adapter.ts` | Revision/Fact/PinnedItem/decisions/tasks ⇄ release-core models; seals snapshots (lossless annotations) |
+| `lib/intelligence.ts`, `lib/normalize.ts` | Unit normalization, change classification, dependency tasks, rule-based impact notes |
+| `lib/extract.ts`, `lib/ai/*` | Provider router, OpenAI + optional Anthropic providers, schema + grounding |
+| `lib/release.ts` | Readiness gate (+token), release status, snapshot comparison |
+| `lib/auth.ts` | HMAC-signed demo sessions; engineer capability |
+| `packages/release-core` | Snapshot sealing/verification, ZIPs, version/release comparison (see its README) |
 
-## Next steps (suggested)
+## Limitations (honest)
 
-- **Kaushik:** improve fact extraction (unit normalization, conflict checks across documents such as the plan set vs a datasheet), handle scanned files, and build the evaluation set (8 or more labeled scenarios: missing, wrong version, duplicate, conflict, scanned).
-- **Ashish:** add a plan set Rev C upload that clears the flag, a supplier-scoped upload view, and persistence (SQLite or Postgres) if time allows.
-- **Both:** get the before/after number from EQORE, then pitch slides and a backup video.
+- **In-memory state**: restarting the server resets to the seed; no multi-instance support.
+- Demo auth with fixed passcodes; replace with SSO/OIDC.
+- Seeded documents other than the switchgear Rev A use deterministic placeholder bytes (labeled in ZIPs/UI).
+- Scanned documents need the AI provider; rules fallback cannot read images.
+- AI output is decision support only; nothing here certifies NFPA 855, UL, NEC or AHJ compliance.

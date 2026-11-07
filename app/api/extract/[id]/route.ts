@@ -7,6 +7,7 @@ import { REQ_BY_ID } from "@/lib/requirements";
 import { getExtraction, getSite, StoreError } from "@/lib/store";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /** Re-run the deterministic comparison when the user corrects the document type. ?requirementId=... */
 export async function GET(req: Request, { params }: { params: { id: string } }) {
