@@ -1,0 +1,21 @@
+{
+  "site": { "id": "synthetic-site", "name": "Synthetic Commercial BESS", "jurisdiction": "SYNTHETIC-DEMO" },
+  "reviewer": { "id": "synthetic-engineer", "name": "Synthetic Engineer", "roles": ["engineer"], "active": true },
+  "template": {
+    "id": "synthetic-permit", "name": "Illustrative Initial Permit", "stage": "initial-permit", "packageType": "permit-submission",
+    "requirements": [
+      { "id": "plan", "family": "engineering-plan", "label": "Engineering plan", "minimumCount": 1 },
+      { "id": "battery", "family": "battery-specification", "label": "Battery specification", "minimumCount": 1 },
+      { "id": "switchgear", "family": "switchgear-specification", "label": "Switchgear specification", "minimumCount": 1 },
+      { "id": "fire", "family": "fire-documentation", "label": "Fire documentation", "minimumCount": 1 }
+    ],
+    "jurisdictionRequirements": [], "consistencyChecks": []
+  },
+  "documents": [
+    { "documentId": "synthetic-plan", "family": "engineering-plan", "title": "Synthetic engineering plan", "componentId": "synthetic-switchgear", "content": "SYNTHETIC — NOT FOR CONSTRUCTION\nRevision: V1\nVoltage rating: 480 V\nCurrent rating: 800 A\nFrequency: 60 Hz\nEngineering layout for demonstration only." },
+    { "documentId": "synthetic-battery", "family": "battery-specification", "title": "Synthetic battery specification", "componentId": "synthetic-battery", "content": "SYNTHETIC — NOT FOR CONSTRUCTION\nRevision: V1\nManufacturer: Synthetic Battery Co\nEquipment model: SYN-BESS-1000\nBattery capacity: 1000 kWh\nPower rating: 500 kW\nInverter quantity: 2" },
+    { "documentId": "synthetic-switchgear", "family": "switchgear-specification", "title": "Synthetic switchgear specification", "componentId": "synthetic-switchgear", "content": "SYNTHETIC — NOT FOR CONSTRUCTION\nRevision: V1\nManufacturer: Synthetic Switchgear Co\nEquipment model: SYN-SW-800\nVoltage rating: 480 V\nCurrent rating: 800 A\nFrequency: 60 Hz" },
+    { "documentId": "synthetic-fire", "family": "fire-documentation", "title": "Synthetic fire documentation", "componentId": "synthetic-site", "content": "SYNTHETIC — NOT FOR CONSTRUCTION\nRevision: V1\nIllustrative fire documentation only; no certification or regulatory conclusion." }
+  ],
+  "switchgearV2": "SYNTHETIC — NOT FOR CONSTRUCTION\nRevision: V2\nManufacturer: Synthetic Switchgear Co\nEquipment model: SYN-SW-800\nVoltage rating: 600 V\nCurrent rating: 800 A\nFrequency: 60 Hz"
+}
