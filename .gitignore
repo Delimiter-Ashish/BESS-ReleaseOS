@@ -1,0 +1,8 @@
+.venv/
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+.DS_Store
+packages/release-core/demo-output/
