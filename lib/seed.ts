@@ -1,0 +1,238 @@
+// Deterministic synthetic portfolio — messy on purpose (missing docs, stale logs,
+// documents awaiting review). Hero site S-1001 uses the STRUCTURE of the sponsor's
+// Century Tywood sample plan set; supplier documents and ratings are synthetic.
+import { createHash } from "crypto";
+import { REQUIREMENTS, STAGES, stageIndex, type StageId } from "./requirements";
+import type { Fact, Release, Revision, ReviewTask, Site } from "./types";
+
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+export const TODAY = new Date();
+const day = 86400000;
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+export const daysAgo = (n: number) => iso(new Date(TODAY.getTime() - n * day));
+export const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
+
+/** Placeholder bytes for seed revisions (no real file). Same content → same hash → reproducible. */
+export function placeholderContent(r: Pick<Revision, "siteId" | "requirementId" | "revLabel" | "fileName" | "effectiveDate">) {
+  return `SYNTHETIC PLACEHOLDER\nsite=${r.siteId}\ndocument=${r.requirementId}\nrevision=${r.revLabel}\nfile=${r.fileName}\ndate=${r.effectiveDate}\n`;
+}
+
+const LABELS = "ABCDEFGHIJ";
+
+function rev(
+  siteId: string,
+  requirementId: string,
+  n: number,
+  effectiveDate: string,
+  opts: Partial<Revision> = {},
+): Revision {
+  const revLabel = LABELS[n - 1];
+  const fileName = opts.fileName ?? `${requirementId}_rev${revLabel}.pdf`;
+  const base = { siteId, requirementId, revLabel, fileName, effectiveDate };
+  const status = opts.status ?? "approved";
+  return {
+    id: `${siteId}-${requirementId}-r${revLabel}`,
+    version: n,
+    sha256: sha256(placeholderContent(base)),
+    source: "seed",
+    uploadedBy: "EQORE PM",
+    uploadedAt: effectiveDate,
+    approvedBy: status === "approved" ? "EQORE engineer" : undefined,
+    approvedAt: status === "approved" ? effectiveDate : undefined,
+    facts: [],
+    engine: "seed",
+    synthetic: true,
+    ...base,
+    ...opts,
+    status,
+  };
+}
+
+const MA_TOWNS = ["Holliston", "Framingham", "Worcester", "Lowell", "Woburn", "Marlborough", "Taunton", "Fall River", "Brockton", "Springfield", "Chicopee", "Billerica", "Canton", "Norwood", "Hopkinton", "Milford", "Fitchburg", "Haverhill", "Peabody", "Wilmington"];
+const CA_TOWNS = ["Fremont", "Hayward", "San Jose", "Oakland", "Richmond", "Union City", "Milpitas", "Santa Clara", "Sunnyvale", "San Leandro", "Newark", "Livermore"];
+const BUSINESSES = ["Precision Machining", "Plastics", "Cold Storage", "Metal Works", "Food Processing", "Packaging", "Fabrication", "Textiles", "Bottling", "Coatings", "Electronics Assembly", "Bakery", "Printing", "Tool & Die", "Brewing", "Logistics Center"];
+const PREFIX = ["Atlas", "Granite", "Harbor", "Summit", "Pioneer", "Keystone", "Liberty", "Northfield", "Bayview", "Redwood", "Cedar", "Ironside", "Crescent", "Union", "Valley", "Beacon"];
+const STREETS = ["Industrial Dr", "Commerce Way", "Mill St", "Depot Rd", "Technology Pkwy", "River Rd", "Elm St", "Main St"];
+const SYSTEMS = [
+  { vendor: "Sungrow PowerTitan", chem: "LFP (lithium iron phosphate)", kw: 250, kwh: 500 },
+  { vendor: "Tesla Megapack 2", chem: "LFP (lithium iron phosphate)", kw: 1000, kwh: 3900 },
+  { vendor: "BYD Battery-Box Premium", chem: "LFP (lithium iron phosphate)", kw: 60, kwh: 120 },
+  { vendor: "Generac SBE", chem: "LFP (lithium iron phosphate)", kw: 125, kwh: 250 },
+  { vendor: "Gotion Edge 760", chem: "LFP (lithium iron phosphate)", kw: 250, kwh: 760 },
+];
+const STAGE_WEIGHTS: [StageId, number][] = [
+  ["contract", 4], ["intake", 6], ["design", 8], ["procurement", 6], ["interconnection", 6], ["permitting", 10],
+  ["installation", 4], ["commissioning", 5], ["pto", 5], ["operations", 42], ["decommissioning", 4],
+];
+
+export interface SeedData {
+  sites: Site[];
+  reviews: ReviewTask[];
+  releases: Release[];
+}
+
+export function buildSeed(count = 84): SeedData {
+  const r = rng(855);
+  const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
+  const sites: Site[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const isMA = r() < 0.7;
+    const city = isMA ? pick(MA_TOWNS) : pick(CA_TOWNS);
+    const sys = pick(SYSTEMS);
+    const units = sys.kwh > 1000 ? 1 : 1 + Math.floor(r() * 2);
+    let acc = 0;
+    const roll = r() * 100;
+    let stage: StageId = "operations";
+    for (const [s, w] of STAGE_WEIGHTS) {
+      acc += w;
+      if (roll < acc) { stage = s; break; }
+    }
+    const si = stageIndex(stage);
+    const id = `S-${String(1001 + i)}`;
+    const opsAgeDays = stage === "operations" || stage === "decommissioning" ? 60 + Math.floor(r() * 900) : 0;
+
+    const documents: Revision[] = [];
+    for (const req of REQUIREMENTS) {
+      const ri = stageIndex(req.stage);
+      if (req.stage === "decommissioning" && stage !== "decommissioning") continue;
+      if (ri > si) continue;
+      const missingP = ri === si ? 0.45 : req.optional ? 0.4 : 0.05;
+      if (r() < missingP) continue;
+      const stageOffset = (STAGES.length - ri) * 25;
+      let ageDays = Math.max(5, stageOffset + opsAgeDays * 0.3 - Math.floor(r() * 20));
+      if (req.recurrenceDays) {
+        ageDays = r() < 0.75 ? Math.floor(r() * (req.recurrenceDays - 20)) : req.recurrenceDays + Math.floor(r() * 200);
+        if (opsAgeDays && ageDays > opsAgeDays) ageDays = opsAgeDays;
+      }
+      const n = 1 + Math.floor(r() * 2);
+      const roll2 = r();
+      documents.push(
+        rev(id, req.id, n, daysAgo(Math.round(ageDays)), {
+          status: roll2 < 0.05 ? "in_review" : "approved",
+          source: ["procurement"].includes(req.stage) ? "supplier" : "eqore",
+        }),
+      );
+    }
+
+    sites.push({
+      id,
+      name: `${pick(PREFIX)} ${pick(BUSINESSES)}`,
+      address: `${10 + Math.floor(r() * 980)} ${pick(STREETS)}, ${city}, ${isMA ? "MA" : "CA"}`,
+      city,
+      state: isMA ? "MA" : "CA",
+      utility: isMA ? (r() < 0.5 ? "National Grid" : "Eversource") : "PG&E",
+      ahj: `${city} Fire Department / Building Dept`,
+      stage,
+      chemistry: sys.chem,
+      powerKw: sys.kw * units,
+      energyKwh: sys.kwh * units,
+      vendor: `${sys.vendor}${units > 1 ? ` ×${units}` : ""}`,
+      location: pick(["Outdoor pad, north side of building", "Outdoor pad near loading dock", "Dedicated ESS room, ground floor", "Outdoor enclosure behind main switchgear"]),
+      disconnectLocation: pick(["Exterior wall next to main switchgear", "On ESS pad, red-labeled AC disconnect", "Electrical room door, left side"]),
+      installDate: si >= stageIndex("installation") ? daysAgo(opsAgeDays + 30) : undefined,
+      documents,
+      events: [],
+      contacts: [
+        { role: "Facility emergency contact", name: pick(["Dana Murphy", "Luis Ortega", "Priya Nair", "Tom Walsh", "Grace Kim"]), phone: `(${isMA ? "508" : "510"}) 555-0${100 + Math.floor(r() * 899)}` },
+        { role: "EQORE 24/7 response", name: "EQORE NOC", phone: "(617) 555-0199" },
+      ],
+    });
+  }
+
+  // ===== Hero site: Century Tywood (structure from sponsor sample plan set) =====
+  const H = "S-1001";
+  const hero = sites[0];
+  Object.assign(hero, {
+    name: "Century Tywood J3 Corp",
+    address: "79 Lowland St, Holliston, MA 01747",
+    city: "Holliston",
+    state: "MA",
+    utility: "Eversource",
+    ahj: "Town of Holliston (Building + Fire)",
+    stage: "permitting",
+    chemistry: "LFP (lithium iron phosphate)",
+    powerKw: 250,
+    energyKwh: 760,
+    vendor: "Gotion Edge 760",
+    inverter: "2 × Dynapower MPS125",
+    location: "Outdoor pad, west side of building (per site plan ESS-2.0)",
+    disconnectLocation: "AC disconnect next to main distribution panel (point of interconnection)",
+    installDate: undefined,
+    events: [],
+  } satisfies Partial<Site>);
+
+  const f = (key: string, label: string, value: string, unit: string | undefined, evidence: string, page: number): Fact => ({ key, label, value, unit, evidence, page, confidence: 0.95 });
+  hero.documents = [
+    rev(H, "contract", 1, daysAgo(160), { source: "eqore" }),
+    rev(H, "proposal", 2, daysAgo(170), { source: "eqore" }),
+    rev(H, "utility_bill", 1, daysAgo(150), { source: "facility", fileName: "Eversource Electric bill.pdf" }),
+    rev(H, "site_photos", 1, daysAgo(148), { source: "eqore", fileName: "Revenue Meter + Transformer + MDP + Pole 54.pdf", facts: [f("meter.serial", "Revenue meter serial", "08105663", undefined, "Serial Number: 08105663", 1), f("pole.number", "Utility pole", "54", undefined, "Power Pole Number: 54", 1)] }),
+    rev(H, "property_record", 1, daysAgo(148), { source: "eqore", fileName: "79 Lowland Street Map.pdf" }),
+    rev(H, "battery_datasheet", 1, daysAgo(120), { source: "supplier", uploadedBy: "Battery supplier", facts: [f("equipment.model", "Model", "Gotion Edge 760", undefined, "BESS: Gotion Edge 760", 1), f("rating.energy_kwh", "Energy", "760", "kWh", "DC System Size: 760kWh", 1), f("chemistry", "Chemistry", "LFP", undefined, "Lithium iron phosphate", 1)] }),
+    rev(H, "inverter_datasheet", 1, daysAgo(118), { source: "supplier", uploadedBy: "Inverter supplier", facts: [f("equipment.model", "Model", "Dynapower MPS125", undefined, "Inverter Model: 2 x Dynapower MPS125", 1), f("rating.power_kw", "AC power (each)", "125", "kW", "MPS125 125 kW", 1), f("rating.voltage_v", "AC voltage", "480", "V", "480 VAC 3-phase", 1)] }),
+    rev(H, "switchgear_datasheet", 1, daysAgo(115), { source: "supplier", uploadedBy: "Switchgear supplier", fileName: "SAMPLE_Switchgear_Datasheet_RevA.pdf", facts: [f("equipment.model", "Model", "NSG-400", undefined, "Model: NSG-400", 1), f("rating.current_a", "Rated current (A)", "400", "A", "Rated continuous current: 400 A", 1), f("rating.voltage_v", "Rated voltage (V)", "480", "V", "Rated voltage: 480 VAC", 1), f("rating.interrupting_ka", "Interrupting rating (kA)", "65", "kA", "Interrupting rating: 65 kA", 1), f("revision.label", "Revision", "A", undefined, "Revision: A", 1), f("doc.date", "Document date", "2026-07-15", undefined, "Date: 2026-07-15", 1)] }),
+    rev(H, "ul9540_listing", 1, daysAgo(112), { source: "supplier" }),
+    rev(H, "ul9540a_report", 1, daysAgo(112), { source: "supplier" }),
+    rev(H, "sds", 1, daysAgo(112), { source: "supplier" }),
+    rev(H, "plan_set", 1, daysAgo(140), { source: "engineer", status: "approved", fileName: "Full Engineered Plan Set_RevA.pdf" }),
+    rev(H, "plan_set", 2, daysAgo(100), { source: "engineer", uploadedBy: "Engineer of record", fileName: "Full Engineered Plan Set_RevB.pdf", summary: "Rev B: change inverters to 2 × Dynapower MPS125 (per sample plan revision block)", facts: [f("revision.label", "Revision", "B", undefined, "B 01/11/2026 Change inverters to 2 x Dynapower MPS125", 1), f("rating.power_kw", "AC system size", "250", "kW", "AC System Size: 250kW", 1), f("rating.energy_kwh", "DC system size", "760", "kWh", "DC System Size: 760kWh", 1), f("rating.current_a", "Switchgear rating (line diagram)", "400", "A", "400A AC disconnect (ESS-13.0, synthetic)", 13)] }),
+    rev(H, "ix_application", 1, daysAgo(95), { source: "eqore" }),
+    rev(H, "ix_approval", 1, daysAgo(40), { source: "utility", uploadedBy: "Eversource" }),
+  ];
+
+  const releases: Release[] = [];
+  // R1 of the AHJ permit package, built from approved revisions
+  const r1Items = ["plan_set", "battery_datasheet", "inverter_datasheet", "switchgear_datasheet", "ul9540_listing", "ul9540a_report", "sds"].map((rid) => {
+    const d = hero.documents.filter((x) => x.requirementId === rid && x.status === "approved").sort((a, b) => b.version - a.version)[0];
+    return { requirementId: rid, revisionId: d.id, revLabel: d.revLabel, fileName: d.fileName, sha256: d.sha256, approvedBy: d.approvedBy, approvedAt: d.approvedAt };
+  });
+  const r1: Release = {
+    id: `${H}-ahj_permit-R1`,
+    siteId: H,
+    templateId: "ahj_permit",
+    number: 1,
+    items: r1Items,
+    openFlags: [],
+    builtBy: "EQORE engineer",
+    builtAt: `${daysAgo(30)}T15:00:00Z`,
+    note: "Initial AHJ submission",
+    manifestSha256: "",
+  };
+  r1.manifestSha256 = sha256(JSON.stringify(r1.items));
+  releases.push(r1);
+
+  // Second showcase site (operating) for the QR / NFPA 855 lifecycle demo
+  const ops = sites[1];
+  ops.name = "Atlas Cold Storage";
+  ops.stage = "operations";
+  ops.documents = REQUIREMENTS.filter((q) => q.stage !== "decommissioning" && q.id !== "training_drill").map((q) =>
+    rev(ops.id, q.id, 1, daysAgo(q.recurrenceDays ? (q.id === "ops_record" ? 400 : 200) : 500 - stageIndex(q.stage) * 20), { source: "eqore" }),
+  );
+
+  // Every seeded in-review revision gets an open review task
+  const reviews: ReviewTask[] = sites.flatMap((s) =>
+    s.documents
+      .filter((d) => d.status === "in_review")
+      .map((d) => ({
+        id: `RV-${d.id}`,
+        siteId: s.id,
+        revisionId: d.id,
+        requirementId: d.requirementId,
+        changes: [],
+        affectedReleaseIds: [],
+        affectedRequirementIds: [],
+        assignee: "EQORE engineer",
+        status: "open" as const,
+        createdAt: `${d.uploadedAt}T12:00:00Z`,
+      })),
+  );
+  return { sites, reviews, releases };
+}
