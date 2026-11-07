@@ -3,15 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "core:build": "npm --prefix packages/release-core run build",
+    "predev": "npm run core:build",
     "dev": "next dev",
+    "prebuild": "npm run core:build",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "npm run core:build && tsc --noEmit",
+    "samples": "node scripts/generate-sample-pdfs.mjs",
+    "test": "npm run test:core && npm run test:app",
+    "test:core": "npm --prefix packages/release-core test",
+    "test:app": "npm run core:build && tsx --test tests/*.test.ts",
+    "e2e": "node scripts/e2e.mjs",
+    "postinstall": "npm --prefix packages/release-core ci --no-audit --no-fund && npm run core:build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
+    "@releaseos/release-core": "file:packages/release-core",
     "jszip": "^3.10.2",
     "next": "14.2.35",
+    "openai": "^7.53.0",
     "qrcode": "^1.5.4",
     "react": "^18",
     "react-dom": "^18",
@@ -24,8 +36,14 @@
     "@types/react-dom": "^18",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
+    "fflate": "^0.8.3",
+    "pdf-lib": "^1.17.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

@@ -1,6 +1,6 @@
 import { zipSync } from 'fflate';
 import type { ReleaseSnapshot } from './models.js';
-import { bytesHash, canonicalJson, checksum, IntelligenceError } from './utils.js';
+import { bytesHash, canonicalJson, checksum, immutable, IntelligenceError } from './utils.js';
 
 /** Integrity validation, not a signature or a legal compliance attestation. */
 export function verifyReleaseSnapshot(release: ReleaseSnapshot): boolean {
@@ -18,8 +18,15 @@ export function verifyReleaseSnapshot(release: ReleaseSnapshot): boolean {
     return true;
   } catch { return false; }
 }
-/** ZIP contains portable manifest metadata and exact original document bytes. */
-export function createReleaseZip(release: ReleaseSnapshot): Uint8Array {
+/** Seal an externally assembled snapshot body (e.g. from an application's own store). Result is frozen and must verify. */
+export function sealReleaseSnapshot(body: Omit<ReleaseSnapshot, 'sha256'>): ReleaseSnapshot {
+  const release = immutable({ ...body, sha256: checksum(body) }) as ReleaseSnapshot;
+  if (!verifyReleaseSnapshot(release)) throw new IntelligenceError('INVALID_RELEASE', 'Snapshot failed integrity validation; every manifest entry needs approved original bytes and a matching approval record');
+  return release;
+}
+const reservedPaths = new Set(['manifest.json', 'snapshot.json']);
+/** ZIP contains portable manifest metadata and exact original document bytes. Extra entries cannot replace reserved or document paths. */
+export function createReleaseZip(release: ReleaseSnapshot, extraEntries: Readonly<Record<string, Uint8Array>> = {}): Uint8Array {
   if (!verifyReleaseSnapshot(release)) throw new IntelligenceError('INVALID_RELEASE', 'Release integrity check failed');
   const entries: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
   const { documents, ...manifest } = release;
@@ -27,6 +34,10 @@ export function createReleaseZip(release: ReleaseSnapshot): Uint8Array {
   entries['manifest.json'] = Buffer.from(canonicalJson(manifest));
   entries['snapshot.json'] = Buffer.from(canonicalJson(release));
   for (const entry of release.manifest) entries[entry.archivePath] = Buffer.from(documents.find(d => d.id === entry.versionId)!.contentBase64, 'base64');
+  for (const [path, bytes] of Object.entries(extraEntries)) {
+    if (reservedPaths.has(path) || path in entries || !/^[a-zA-Z0-9_.-]+(\/[a-zA-Z0-9_.-]+)*$/.test(path) || path.split('/').includes('..')) throw new IntelligenceError('INVALID_ARCHIVE_PATH', `Extra archive entry ${path} is not allowed`);
+    entries[path] = bytes;
+  }
   // Fixed archive metadata makes the ZIP reproducible for the same release.
   return zipSync(entries, { level: 6, mtime: new Date('2000-01-01T00:00:00Z') });
 }

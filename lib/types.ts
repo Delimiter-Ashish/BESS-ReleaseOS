@@ -10,6 +10,15 @@ export interface Fact {
   evidence?: string; // short verbatim quote from the document
   page?: number;
   confidence: number; // 0..1
+  // ---- additive (integration) ----
+  /** found = stated clearly; uncertain/ambiguous = model or parser could not establish it reliably. */
+  status?: "found" | "uncertain" | "ambiguous";
+  /** True when the evidence quote was located verbatim in the PDF text layer (server-checked). */
+  evidenceVerified?: boolean;
+  /** True when the page number was checked against that text-layer page. */
+  pageVerified?: boolean;
+  origin?: "openai" | "anthropic" | "rules" | "seed";
+  note?: string;
 }
 
 /** Back-compat alias used by older UI code. */
@@ -41,7 +50,19 @@ export interface Revision {
   facts: Fact[];
   summary?: string;
   aiConfidence?: number;
-  engine?: "claude" | "rules" | "seed";
+  engine?: "claude" | "openai" | "rules" | "seed";
+  // ---- additive (integration) ----
+  mediaType?: string;
+  /** Server session user id of the uploader (used to block self-approval). */
+  uploadedById?: string;
+  /** Extracted text layer (when available) — used to verify evidence quotes. */
+  textLayer?: string;
+  pageCount?: number;
+  model?: string;
+  extractionWarnings?: string[];
+  missingItems?: string[];
+  rejectedBy?: string;
+  rejectedAt?: string;
   synthetic?: boolean; // label synthetic docs honestly in the UI
   notes?: string;
 }
@@ -56,6 +77,18 @@ export interface FactChange {
   evidenceBefore?: string;
   evidenceAfter?: string;
   pageAfter?: number;
+  // ---- additive (integration) ----
+  pageBefore?: number;
+  /** Values converted to a canonical unit (e.g. 0.6 kV → 600 V) for comparison. */
+  normalizedBefore?: string;
+  normalizedAfter?: string;
+  /** material = engineering-relevant; cosmetic = same normalized value, different wording; informational = metadata (revision/date). */
+  significance?: "material" | "cosmetic" | "informational";
+  reason?: string;
+  evidenceVerifiedAfter?: boolean;
+  /** AI- or rule-generated explanation of possible consequences. Never an approval. */
+  impact?: string;
+  impactSource?: "openai" | "rules";
 }
 
 /** Created when a revision is submitted. Engineer approves or rejects. */
@@ -74,6 +107,55 @@ export interface ReviewTask {
   decidedBy?: string;
   decidedAt?: string;
   note?: string;
+  // ---- additive (integration) ----
+  materialChangeCount?: number;
+  aiSummary?: string;
+  aiSummarySource?: "openai" | "rules";
+  /** Requirements that might be affected but have no document on file yet. */
+  potentiallyAffectedMissing?: string[];
+}
+
+/**
+ * Engineering review task for a DEPENDENT document, created deterministically from the
+ * dependency graph when a source document has material changes (core: ReviewTask).
+ * Only an authorized engineer can resolve it, and only after the exact source revision is approved.
+ */
+export interface EngineeringTask {
+  id: string;
+  siteId: string;
+  sourceRevisionId: string;
+  sourceRequirementId: string;
+  dependentRequirementId: string;
+  /** The dependent's approved revision at the time the task was raised. */
+  dependentRevisionId?: string;
+  changedKeys: string[];
+  explanation: string; // deterministic, from the dependency graph
+  aiImpact?: string; // optional AI explanation (advisory only)
+  status: "open" | "resolved" | "superseded";
+  createdAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolution?: "confirmed_no_change" | "new_revision_approved";
+  resolutionNote?: string;
+  resolvedByDecisionId?: string;
+}
+
+/** Immutable audit record of a human decision (core: ReviewDecision). */
+export interface DecisionRecord {
+  id: string;
+  siteId: string;
+  kind: "revision_review" | "dependency_resolution" | "release_signoff";
+  revisionId?: string;
+  contentSha256?: string;
+  taskIds: string[];
+  releaseId?: string;
+  decision: "approved" | "rejected" | "resolved" | "signed_off";
+  reviewerId: string;
+  reviewerName: string;
+  reviewerRoles: string[];
+  note: string;
+  at: string;
+  seeded?: boolean;
 }
 
 export interface PinnedItem {
@@ -98,6 +180,10 @@ export interface Release {
   builtAt: string; // ISO datetime
   note?: string;
   manifestSha256: string;
+  // ---- additive (integration) ----
+  /** Frozen release-core ReleaseSnapshot (schemaVersion 1). Never regenerated from live data. */
+  snapshot?: import("@releaseos/release-core").ReleaseSnapshot;
+  builtById?: string;
 }
 
 export interface ChangeEvent {
@@ -134,6 +220,9 @@ export interface Site {
   documents: Revision[]; // all revisions, every status
   events: ChangeEvent[];
   contacts: Contact[];
+  // ---- additive (integration) ----
+  engTasks?: EngineeringTask[];
+  decisions?: DecisionRecord[];
 }
 
 export interface User {

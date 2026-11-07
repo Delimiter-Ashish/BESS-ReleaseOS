@@ -1,0 +1,32 @@
+import { NextResponse } from "next/server";
+import { requireCap } from "@/lib/auth";
+import { handle } from "@/lib/http";
+import { affectedDependents, compareFacts, materialChanges, ruleImpact } from "@/lib/intelligence";
+import { latestApproved } from "@/lib/release";
+import { REQ_BY_ID } from "@/lib/requirements";
+import { getExtraction, getSite, StoreError } from "@/lib/store";
+
+export const runtime = "nodejs";
+
+/** Re-run the deterministic comparison when the user corrects the document type. ?requirementId=... */
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  return handle(() => {
+    const session = requireCap(req, "upload");
+    const ex = getExtraction(params.id);
+    if (!ex || ex.createdBy !== session.userId) throw new StoreError(404, "extraction not found");
+    const rid = new URL(req.url).searchParams.get("requirementId") ?? "";
+    if (!REQ_BY_ID[rid]) throw new StoreError(400, "unknown document type");
+    const site = getSite(ex.siteId)!;
+    const prev = latestApproved(site, rid);
+    const changes = prev ? compareFacts(prev.facts, ex.result.facts) : [];
+    const material = materialChanges(changes);
+    const preview = changes.map((c) => (c.significance === "material" ? { ...c, impact: (rid === ex.result.requirementId && ex.impacts[c.key]?.impact) || ruleImpact(c.key), impactSource: rid === ex.result.requirementId && ex.impacts[c.key] ? ex.impacts[c.key].source : "rules" } : c));
+    const deps = material.length ? affectedDependents(rid, material.map((c) => c.key)) : [];
+    return NextResponse.json({
+      ok: true,
+      previous: prev ? { revLabel: prev.revLabel, fileName: prev.fileName, id: prev.id } : null,
+      diffPreview: preview,
+      dependentsPreview: deps.map((d) => ({ id: d.id, name: d.name, onFile: !!latestApproved(site, d.id) })),
+    });
+  });
+}

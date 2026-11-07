@@ -1,7 +1,9 @@
 // ===== ReleaseOS engine (owner: Ashish) =====
 // Pure functions over a Site + its releases. No I/O here — store.ts does mutations.
+import { checksum, compareReleases as coreCompareReleases, type ReleaseComparison } from "@releaseos/release-core";
+import { compareFacts } from "./intelligence";
 import { REQ_BY_ID, REQUIREMENTS, TEMPLATE_BY_ID, type PackageTemplate } from "./requirements";
-import type { Fact, FactChange, Release, Revision, Site } from "./types";
+import type { EngineeringTask, Fact, FactChange, Release, Revision, Site } from "./types";
 
 export const byNewest = (a: Revision, b: Revision) => b.version - a.version;
 
@@ -22,20 +24,9 @@ export function isSuperseded(site: Site, r: Revision) {
   return r.status === "approved" && !!a && a.id !== r.id;
 }
 
-const fmt = (f?: Fact) => (f ? `${f.value}${f.unit ? ` ${f.unit}` : ""}` : undefined);
-const norm = (s?: string) => (s ?? "").toLowerCase().replace(/[\s,]/g, "");
-
-/** Fact-level diff between two revisions (by canonical key). */
+/** Fact-level diff between two revisions (by canonical key). Unit-normalized and classified (material / cosmetic / informational). */
 export function diffFacts(before: Fact[] = [], after: Fact[] = []): FactChange[] {
-  const keys = Array.from(new Set([...before.map((f) => f.key), ...after.map((f) => f.key)]));
-  const out: FactChange[] = [];
-  for (const k of keys) {
-    const b = before.find((f) => f.key === k);
-    const a = after.find((f) => f.key === k);
-    if (b && a && norm(fmt(b)) === norm(fmt(a))) continue;
-    out.push({ key: k, label: a?.label ?? b?.label ?? k, before: fmt(b), after: fmt(a), evidenceBefore: b?.evidence, evidenceAfter: a?.evidence, pageAfter: a?.page });
-  }
-  return out;
+  return compareFacts(before, after);
 }
 
 /** Requirements that depend on `requirementId` (e.g. plan_set depends on switchgear_datasheet). */
@@ -43,39 +34,48 @@ export function dependentsOf(requirementId: string) {
   return REQUIREMENTS.filter((r) => r.dependsOn?.includes(requirementId)).map((r) => r.id);
 }
 
+export const openTasks = (site: Site, requirementId?: string): EngineeringTask[] =>
+  (site.engTasks ?? []).filter((t) => t.status === "open" && (!requirementId || t.dependentRequirementId === requirementId));
+
 /**
- * Engineering-review flags: a document whose upstream dependency got a newer approved
- * revision AFTER this document's approval (e.g. new switchgear datasheet → plan set may need revision).
+ * Engineering-review flags = OPEN dependency review tasks targeting this document (explicit records,
+ * created deterministically from the dependency graph; resolved only by an authorized engineer).
  */
 export function dependencyFlags(site: Site, requirementId: string): string[] {
-  const req = REQ_BY_ID[requirementId];
-  const doc = latestApproved(site, requirementId);
-  if (!req?.dependsOn || !doc) return [];
-  const flags: string[] = [];
-  for (const dep of req.dependsOn) {
-    const d = latestApproved(site, dep);
-    if (d && (d.approvedAt ?? "") > (doc.approvedAt ?? "") && d.version > 1) {
-      flags.push(`${req.name} Rev ${doc.revLabel} predates ${REQ_BY_ID[dep].name} Rev ${d.revLabel} (approved ${String(d.approvedAt).slice(0, 10)}) — engineer to confirm or re-issue`);
-    }
-  }
-  return flags;
+  return openTasks(site, requirementId).map((t) => t.explanation);
 }
 
-export type ItemState = "ready" | "missing" | "in_review" | "needs_eng_review";
+export type ItemState = "ready" | "missing" | "in_review" | "pending_change" | "needs_eng_review";
 
+export interface ReadinessIssue { code: "MISSING_DOCUMENT" | "NO_APPROVED_VERSION" | "PENDING_REVIEW" | "CHANGED_SOURCE"; requirementId: string; message: string; taskId?: string }
+
+/** Deterministic release gate (core semantics: pending reviews and open dependency tasks block signoff). */
 export function packageReadiness(site: Site, template: PackageTemplate) {
+  const issues: ReadinessIssue[] = [];
   const items = template.required.map((rid) => {
+    const name = REQ_BY_ID[rid]?.name ?? rid;
     const approved = latestApproved(site, rid);
     const pending = pendingRevision(site, rid);
-    const flags = dependencyFlags(site, rid);
+    const tasks = openTasks(site, rid);
+    const flags = tasks.map((t) => t.explanation);
     let state: ItemState = "ready";
-    if (!approved) state = pending ? "in_review" : "missing";
-    else if (flags.length) state = "needs_eng_review";
-    return { requirementId: rid, name: REQ_BY_ID[rid]?.name ?? rid, approved, pending, flags, state };
+    if (!approved) {
+      state = pending ? "in_review" : "missing";
+      issues.push(pending ? { code: "NO_APPROVED_VERSION", requirementId: rid, message: `${name}: Rev ${pending.revLabel} awaiting engineer review; no approved revision yet` } : { code: "MISSING_DOCUMENT", requirementId: rid, message: `${name}: required document is missing` });
+    } else if (pending) {
+      state = "pending_change";
+      issues.push({ code: "PENDING_REVIEW", requirementId: rid, message: `${name}: Rev ${pending.revLabel} is pending engineer review (Rev ${approved.revLabel} remains the approved version)` });
+    }
+    for (const t of tasks) {
+      if (state === "ready") state = "needs_eng_review";
+      issues.push({ code: "CHANGED_SOURCE", requirementId: rid, taskId: t.id, message: `${name}: dependency review open — ${REQ_BY_ID[t.sourceRequirementId]?.name ?? t.sourceRequirementId} changed (${t.changedKeys.join(", ")})` });
+    }
+    return { requirementId: rid, name, approved, pending, flags, tasks, state };
   });
-  const blockers = items.filter((i) => i.state === "missing" || i.state === "in_review");
+  const blockers = items.filter((i) => i.state !== "ready");
   const flags = items.flatMap((i) => i.flags);
-  return { items, canBuild: blockers.length === 0, blockers, flags, readyCount: items.filter((i) => i.state === "ready").length };
+  const token = checksum({ templateId: template.id, siteId: site.id, items: items.map((i) => ({ r: i.requirementId, a: i.approved?.id ?? null, p: i.pending?.id ?? null, t: i.tasks.map((t) => t.id) })) });
+  return { items, canBuild: blockers.length === 0, blockers, flags, issues, token, readyCount: items.filter((i) => i.state === "ready").length };
 }
 
 export type ReleaseState = "current" | "pending_change" | "stale";
@@ -156,4 +156,25 @@ export function buildManifest(site: Site, release: Release, prev?: Release) {
       : [],
     templateBasis: t?.basis,
   };
+}
+
+/** Frozen app revisions stored inside a release snapshot (lossless copies at build time). */
+export function frozenRevisions(rel: Release): Revision[] {
+  return ((rel.snapshot?.annotations?.revisions as Revision[] | undefined) ?? []);
+}
+
+/**
+ * Historical comparison computed ONLY from two frozen snapshots — never from live data.
+ * Uses release-core's compareReleases for the authoritative added/removed/updated sets.
+ */
+export function compareSnapshots(prev: Release, next: Release): { core: ReleaseComparison | null; docs: { requirementId: string; name: string; before?: Revision; after?: Revision; changed: boolean; factChanges: FactChange[] }[] } {
+  const core = prev.snapshot && next.snapshot ? coreCompareReleases(prev.snapshot, next.snapshot) : null;
+  const pr = frozenRevisions(prev), nr = frozenRevisions(next);
+  const reqs = Array.from(new Set([...nr.map((r) => r.requirementId), ...pr.map((r) => r.requirementId)]));
+  const docs = reqs.map((rid) => {
+    const before = pr.find((r) => r.requirementId === rid), after = nr.find((r) => r.requirementId === rid);
+    const changed = before?.id !== after?.id;
+    return { requirementId: rid, name: REQ_BY_ID[rid]?.name ?? rid, before, after, changed, factChanges: changed ? compareFacts(before?.facts, after?.facts) : [] };
+  });
+  return { core, docs };
 }

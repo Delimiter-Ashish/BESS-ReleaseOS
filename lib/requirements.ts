@@ -76,6 +76,8 @@ export interface Requirement {
   dependsOn?: string[];
   /** Fact keys the AI should look for (helps extraction + diff). */
   keyFacts?: string[];
+  /** Upstream fact keys that matter to this document (core: Dependency.relevantFields). Empty/undefined = any material change. */
+  dependencyFields?: string[];
 }
 
 export const REQUIREMENTS: Requirement[] = [
@@ -145,7 +147,8 @@ export const REQUIREMENTS: Requirement[] = [
     access: ["eqore", "ahj", "facility", "supplier"],
     triggers: [],
     dependsOn: ["battery_datasheet", "inverter_datasheet", "switchgear_datasheet"],
-    keyFacts: ["revision.label", "rating.power_kw", "rating.energy_kwh", "equipment.model", "doc.date"],
+    dependencyFields: ["rating.voltage_v", "rating.current_a", "rating.interrupting_ka", "rating.power_kw", "rating.energy_kwh", "rating.frequency_hz", "equipment.model", "equipment.manufacturer", "equipment.quantity", "chemistry"],
+    keyFacts: ["revision.label", "rating.power_kw", "rating.energy_kwh", "rating.voltage_v", "rating.current_a", "equipment.model", "doc.date"],
   },
   // ---------- Procurement (supplier documents) ----------
   {
@@ -179,7 +182,7 @@ export const REQUIREMENTS: Requirement[] = [
     when: "From supplier",
     access: ["eqore", "ahj", "supplier"],
     triggers: [],
-    keyFacts: ["equipment.model", "rating.current_a", "rating.voltage_v", "rating.interrupting_ka"],
+    keyFacts: ["equipment.manufacturer", "equipment.model", "rating.current_a", "rating.voltage_v", "rating.interrupting_ka", "rating.frequency_hz"],
   },
   {
     id: "ul9540_listing",
@@ -211,6 +214,8 @@ export const REQUIREMENTS: Requirement[] = [
     when: "Submitted before design is finalized",
     access: ["eqore", "facility"],
     triggers: ["add_modules", "inverter_replace"],
+    dependsOn: ["inverter_datasheet", "switchgear_datasheet"],
+    dependencyFields: ["rating.voltage_v", "rating.current_a", "rating.power_kw", "rating.energy_kwh", "equipment.model", "equipment.quantity"],
   },
   {
     id: "ix_approval",
@@ -283,6 +288,8 @@ export const REQUIREMENTS: Requirement[] = [
     when: "Before final inspection; update when equipment changes",
     access: ["eqore", "ahj", "facility", "public"],
     triggers: ["add_modules", "inverter_replace"],
+    dependsOn: ["switchgear_datasheet"],
+    dependencyFields: ["rating.voltage_v", "rating.current_a"],
   },
   {
     id: "sds",

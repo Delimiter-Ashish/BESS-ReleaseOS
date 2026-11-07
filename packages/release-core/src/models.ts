@@ -95,7 +95,10 @@ export interface ReleaseSnapshot {
   manifest: readonly ReleaseManifestEntry[];
   documents: readonly DocumentVersion[]; reviewerApprovals: readonly ReviewDecision[];
   dependencies: readonly Dependency[]; reviewTasks: readonly ReviewTask[];
-  readinessToken: string; sha256: string;
+  readinessToken: string;
+  /** Optional application metadata frozen at build time (e.g. a human-readable manifest, original app records). Covered by sha256. */
+  annotations?: { readonly [key: string]: unknown };
+  sha256: string;
 }
 export interface ReleaseComparison {
   fromReleaseId: string; toReleaseId: string;

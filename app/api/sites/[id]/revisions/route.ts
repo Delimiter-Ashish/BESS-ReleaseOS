@@ -1,26 +1,24 @@
 import { NextResponse } from "next/server";
+import { requireCap } from "@/lib/auth";
+import { asString, handle, jsonBody } from "@/lib/http";
 import { submitRevision } from "@/lib/store";
+import type { Revision } from "@/lib/types";
 
-/** Step 2 of intake: file the revision as IN REVIEW and open a review task. */
+export const runtime = "nodejs";
+
+/** Step 2 of intake: file the server-side extraction as a revision IN REVIEW. Client hashes/facts are never accepted. */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const b = await req.json();
-  try {
+  return handle(async () => {
+    const session = requireCap(req, "upload");
+    const b = await jsonBody(req);
     const out = submitRevision(params.id, {
-      requirementId: b.requirementId,
-      fileId: b.fileId,
-      fileName: b.fileName,
-      sha256: b.sha256,
-      facts: b.facts ?? [],
-      effectiveDate: b.effectiveDate,
-      source: b.source,
-      uploadedBy: b.uploadedBy,
-      summary: b.summary,
-      aiConfidence: b.aiConfidence,
-      engine: b.engine,
-      synthetic: b.synthetic,
-    });
-    return NextResponse.json({ ok: true, ...out });
-  } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });
-  }
+      extractionId: asString(b.extractionId, 80) ?? "",
+      requirementId: asString(b.requirementId, 60) ?? "",
+      effectiveDate: asString(b.effectiveDate, 10),
+      source: asString(b.source, 20) as Revision["source"] | undefined,
+    }, session);
+    const { textLayer: _t, ...revision } = out.revision;
+    void _t;
+    return NextResponse.json({ ok: true, revision, review: out.review, engineeringTasks: out.engineeringTasks });
+  });
 }
