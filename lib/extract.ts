@@ -1,9 +1,8 @@
 // ===== AI layer (owner: Kaushik) =====
 // Two engines behind one interface:
-//  - "claude": multimodal (PDF + scanned images) via Anthropic API, if ANTHROPIC_API_KEY is set
+//  - "ai": multimodal (PDF + scanned images) via OpenAI API, if OPENAI_API_KEY is set
 //  - "rules": deterministic text + regex fallback (works offline; text PDFs / .txt only)
 // Both return canonical Facts so revisions can be diffed.
-import Anthropic from "@anthropic-ai/sdk";
 import { REQUIREMENTS } from "./requirements";
 import type { Fact } from "./types";
 
@@ -35,11 +34,11 @@ export interface ExtractionResult {
   facts: Fact[];
   missingItems: string[];
   warnings: string[];
-  engine: "claude" | "rules";
+  engine: "ai" | "rules";
   textChars?: number;
 }
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 
 function prompt(siteName: string, siteFacts: string) {
   const catalog = REQUIREMENTS.map((r) => `- ${r.id}: ${r.name} [${r.codeRef}] — must include: ${r.mustInclude}`).join("\n");
@@ -64,19 +63,39 @@ Respond with ONLY JSON:
 
 export async function extractDocument(opts: { fileName: string; mediaType: string; bytes: Buffer; siteName: string; siteFacts: string }): Promise<ExtractionResult> {
   const text = await getText(opts.fileName, opts.mediaType, opts.bytes);
-  if (!process.env.ANTHROPIC_API_KEY) return rulesExtract(opts.fileName, text);
+  if (!process.env.OPENAI_API_KEY) return rulesExtract(opts.fileName, text);
 
-  const client = new Anthropic();
-  const content: Anthropic.ContentBlockParam[] = [];
+  // Build the user message. Text PDFs / txt: send extracted text (fast, cheap, reliable).
+  // Scanned PDFs and images: send the file itself so the vision model can read it.
+  type Part = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } } | { type: "file"; file: { filename: string; file_data: string } };
+  const content: Part[] = [];
   const b64 = opts.bytes.toString("base64");
-  if (opts.mediaType === "application/pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } });
-  else if (opts.mediaType.startsWith("image/")) content.push({ type: "image", source: { type: "base64", media_type: opts.mediaType as "image/png" | "image/jpeg" | "image/webp" | "image/gif", data: b64 } });
+  if (text && text.trim().length > 40) content.push({ type: "text", text: `Document text (${opts.fileName}):\n${text}` });
+  else if (opts.mediaType === "application/pdf") content.push({ type: "file", file: { filename: opts.fileName, file_data: `data:application/pdf;base64,${b64}` } });
+  else if (opts.mediaType.startsWith("image/")) content.push({ type: "image_url", image_url: { url: `data:${opts.mediaType};base64,${b64}` } });
   else content.push({ type: "text", text: `Document text (${opts.fileName}):\n${text ?? ""}` });
   content.push({ type: "text", text: prompt(opts.siteName, opts.siteFacts) });
 
-  const msg = await client.messages.create({ model: MODEL, max_tokens: 2500, messages: [{ role: "user", content }] });
-  const out = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  const p = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1));
+  // Never crash the demo: on any network/API/parse failure fall back to the offline engine and say why.
+  const fallback = (why: string) => {
+    const r = rulesExtract(opts.fileName, text);
+    r.warnings.unshift(`OpenAI call failed (${why}); used offline rules engine instead.`);
+    return r;
+  };
+  let p;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({ model: MODEL, temperature: 0, response_format: { type: "json_object" }, messages: [{ role: "user", content }] }),
+    });
+    if (!res.ok) return fallback(`HTTP ${res.status}`);
+    const data = await res.json();
+    const out: string = data.choices?.[0]?.message?.content ?? "{}";
+    p = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1));
+  } catch (e) {
+    return fallback(e instanceof Error ? e.message : "network error");
+  }
   return {
     requirementId: p.requirementId ?? "unknown",
     docTypeConfidence: Number(p.docTypeConfidence ?? 0.5),
@@ -87,7 +106,7 @@ export async function extractDocument(opts: { fileName: string; mediaType: strin
     facts: (Array.isArray(p.facts) ? p.facts : []).map((f: Fact) => ({ ...f, label: f.label || FACT_KEYS[f.key] || f.key, unit: f.unit ?? undefined, confidence: Number(f.confidence ?? 0.5) })),
     missingItems: Array.isArray(p.missingItems) ? p.missingItems : [],
     warnings: Array.isArray(p.warnings) ? p.warnings : [],
-    engine: "claude",
+    engine: "ai",
     textChars: text?.length,
   };
 }
@@ -162,7 +181,7 @@ export function rulesExtract(fileName: string, text?: string): ExtractionResult 
     effectiveDate = `${yy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
   }
   const warnings: string[] = [];
-  if (!text) warnings.push("No text layer (scanned image) — rules engine cannot read it. Add ANTHROPIC_API_KEY for the vision model, or enter facts manually.");
+  if (!text) warnings.push("No text layer (scanned image) — rules engine cannot read it. Add OPENAI_API_KEY for the vision model, or enter facts manually.");
   return {
     requirementId: t?.[0] ?? "unknown",
     docTypeConfidence: t ? 0.75 : 0.2,

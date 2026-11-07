@@ -14,7 +14,7 @@ interface Result {
   facts: Fact[];
   missingItems: string[];
   warnings: string[];
-  engine: "claude" | "rules";
+  engine: "ai" | "rules";
   fileId: string;
   sha256: string;
   fileName: string;
@@ -104,7 +104,7 @@ export default function UploadPanel({ siteId }: { siteId: string }) {
       {res && !res.error && (
         <div className="mt-4 space-y-3 text-sm">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>{res.engine === "claude" ? "✨ Claude (multimodal)" : "⚙ Rules engine (offline)"} · {(res.ms / 1000).toFixed(1)}s</span>
+            <span>{res.engine === "ai" ? "✨ AI (OpenAI, multimodal)" : "⚙ Rules engine (offline)"} · {(res.ms / 1000).toFixed(1)}s</span>
             <span className={`rounded px-1.5 py-0.5 font-medium ${conf(res.docTypeConfidence)}`}>type {Math.round(res.docTypeConfidence * 100)}%</span>
           </div>
           <div className="font-mono text-[10px] text-slate-400">sha256 {res.sha256.slice(0, 24)}…</div>

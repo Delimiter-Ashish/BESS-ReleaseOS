@@ -41,7 +41,7 @@ export interface Revision {
   facts: Fact[];
   summary?: string;
   aiConfidence?: number;
-  engine?: "claude" | "rules" | "seed";
+  engine?: "ai" | "rules" | "seed";
   synthetic?: boolean; // label synthetic docs honestly in the UI
   notes?: string;
 }
