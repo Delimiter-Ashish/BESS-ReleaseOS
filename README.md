@@ -283,7 +283,7 @@ ReleaseOS keeps state in JSON files on disk (`RELEASEOS_DATA_DIR`), so it needs 
 stateless/serverless filesystem (e.g. default Vercel) would lose uploads, reviews and sealed releases. Run a single
 instance (the store is single-process).
 
-- **Railway** (`railway.json`): Node 22 (`.node-version`), `npm run build`, `npm start`, health check `/api/session`.
+- **Railway** (`railway.json` → `Dockerfile`, `node:22`): `npm ci && npm run build`, `npm start`, health check `/api/session`.
   Attach a volume (e.g. mounted at `/data`).
 - **Render** (`render.yaml` Blueprint): a persistent disk requires a paid instance.
 
