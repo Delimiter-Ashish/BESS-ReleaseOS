@@ -2,6 +2,7 @@
 // Guardian Scan — a REAL execution of POST /api/sites/:id/preflight (Ashish's Project Guardian).
 // The backend returns one report (no progress events), so while the request is in flight we show an honest
 // indeterminate indicator and the real elapsed time. Check rows get their results only from the returned report.
+import LocalTime from "@/components/LocalTime";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { runPreflight, type ApiResult } from "@/lib/api/client";
 import type { PreflightFinding, PreflightReport } from "@/lib/guardian/types";
@@ -181,7 +182,7 @@ export default function GuardianScan({ site, templateId, templateLabel, docs, by
                 {report.canBuild
                   ? <><b>All configured checks passed</b> for {templateLabel}. Ready for authorized engineer signoff — this is not a certification of code compliance.</>
                   : <><b>{report.counts.blocker} blocker{report.counts.blocker === 1 ? "" : "s"}</b> must be resolved before {templateLabel} can be signed off · {report.counts.warning} warning(s) · {report.counts.info} note(s).</>}
-                <div className="mt-1 text-[11px] text-ink-muted">Ran {new Date(report.ranAt).toLocaleTimeString()} · AI: {report.consistency.ai === "openai" ? "OpenAI second opinion (advisory)" : report.consistency.ai === "unavailable" ? "requested but not configured" : "off"}{report.consistency.aiNote ? ` — ${report.consistency.aiNote}` : ""}</div>
+                <div className="mt-1 text-[11px] text-ink-muted">Ran <LocalTime iso={report.ranAt} mode="time" /> · AI: {report.consistency.ai === "openai" ? "OpenAI second opinion (advisory)" : report.consistency.ai === "unavailable" ? "requested but not configured" : "off"}{report.consistency.aiNote ? ` — ${report.consistency.aiNote}` : ""}</div>
               </div>
             )}
           </div>

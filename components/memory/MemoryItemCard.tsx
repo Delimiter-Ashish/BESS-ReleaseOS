@@ -1,4 +1,5 @@
 "use client";
+import LocalTime from "@/components/LocalTime";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { MemoryItem } from "@/lib/memory/types";
@@ -70,7 +71,7 @@ export default function MemoryItemCard({ siteId, item, packages, docTypes, canMa
         <blockquote key={s.communicationId} className="mt-2 border-l-2 border-slate-300 pl-2 text-xs">
           <span className="italic text-slate-700">“{s.evidence}”</span>
           <div className="mt-0.5 text-[11px] text-slate-500">
-            {s.sender} · {new Date(s.sentAt).toLocaleString()} · <a href={`#${s.communicationId}`} className="underline">{s.communicationId}</a>{" "}
+            {s.sender} · <LocalTime iso={s.sentAt} /> · <a href={`#${s.communicationId}`} className="underline">{s.communicationId}</a>{" "}
             {s.evidenceVerified ? <span className="text-emerald-600">✓ quote found in original</span> : <span className="text-orange-700">⚠ quote not found in original — verify</span>}
           </div>
         </blockquote>
