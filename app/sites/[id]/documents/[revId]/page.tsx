@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { ChangeTable, Confidence, EngineBadge, EvidenceStatus, Hash } from "@/components/ui";
-import { can, getSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
+import { canViewRevision } from "@/lib/studio/access";
 import { compareFacts } from "@/lib/intelligence";
 import { latestApproved, revisionsOf } from "@/lib/release";
 import { REQ_BY_ID } from "@/lib/requirements";
@@ -18,6 +19,21 @@ export default function DocumentPage({ params, searchParams }: { params: { id: s
   if (!site || !rev) notFound();
   const session = getSession();
   const req = REQ_BY_ID[rev.requirementId];
+  // Access policy (server-enforced): internal documents are not shown to suppliers, authorities or the public.
+  if (!canViewRevision(session, site, rev)) {
+    return (
+      <>
+        <AppHeader />
+        <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+          <div className="card space-y-2 p-6">
+            <h1 className="text-lg font-semibold">Not authorized</h1>
+            <p className="text-sm text-slate-600">{session.role === "public" ? "Sign in to view project documents." : `${session.name} is not permitted to view this ${req?.name ?? "document"} under the project's document access policy.`}</p>
+            <Link href={`/sites/${site.id}`} className="text-sm text-indigo-700 underline">Back to the site</Link>
+          </div>
+        </main>
+      </>
+    );
+  }
   const history = revisionsOf(site, rev.requirementId);
   const approved = latestApproved(site, rev.requirementId);
   const superseded = rev.status === "approved" && approved?.id !== rev.id;
@@ -26,7 +42,7 @@ export default function DocumentPage({ params, searchParams }: { params: { id: s
   const changes = baseline ? compareFacts(baseline.facts, rev.facts) : [];
   const decisions = getDecisions(site.id).filter((d) => d.revisionId === rev.id || (d.taskIds.length && (site.engTasks ?? []).some((t) => d.taskIds.includes(t.id) && t.sourceRevisionId === rev.id)));
   const tasksRaised = (site.engTasks ?? []).filter((t) => t.sourceRevisionId === rev.id);
-  const canFile = can(session, "read_private") && !!rev.fileId;
+  const canFile = !!rev.fileId; // reaching this point means the access policy allows viewing
 
   return (
     <>

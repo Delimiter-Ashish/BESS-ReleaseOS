@@ -65,7 +65,9 @@ export async function reviewFinding(f: ConsistencyFinding, revs: Map<string, Rev
   if (!raw.suggestedClass || !Array.isArray(raw.citedEvidence)) throw new Error("Malformed AI review");
   const det = f.class;
   // A deterministic "verified" finding corresponds to AI "potential_inconsistency" with sameEquipment "yes"; anything else is shown as a disagreement.
-  const disagrees = det === "verified_discrepancy" ? raw.suggestedClass !== "potential_inconsistency" || raw.sameEquipment !== "yes" : raw.suggestedClass !== det;
+  const disagrees = det === "verified_discrepancy" ? raw.suggestedClass !== "potential_inconsistency" || raw.sameEquipment !== "yes"
+    : det === "needs_clarification" ? raw.suggestedClass === "explained_difference" || raw.sameEquipment === "no"
+    : raw.suggestedClass !== det;
   const review: AiReview = {
     model: res.model ?? OPENAI_MODEL(), sameEquipment: raw.sameEquipment, sameInterface: raw.sameInterface, suggestedClass: raw.suggestedClass,
     explanation: String(raw.explanation).slice(0, 900),

@@ -8,7 +8,7 @@ const SEV = {
   warning: { label: "Review", cls: "bg-amber-50 text-amber-800 ring-amber-200", card: "border-amber-200 bg-amber-50/20" },
   info: { label: "Info", cls: "bg-slate-100 text-slate-600 ring-slate-200", card: "border-slate-200 bg-white" },
 } as const;
-const CLASS_LABEL = { verified_discrepancy: "Verified discrepancy", potential_inconsistency: "Potential inconsistency", explained_difference: "Explained difference", consistent: "Consistent", insufficient_evidence: "Insufficient evidence" } as const;
+const CLASS_LABEL = { verified_discrepancy: "Verified discrepancy", needs_clarification: "Needs engineering clarification", potential_inconsistency: "Potential inconsistency", explained_difference: "Explained difference", consistent: "Consistent", insufficient_evidence: "Insufficient evidence" } as const;
 
 function Chain({ steps, onExplore }: { steps: ChainStep[]; onExplore: (id: string) => void }) {
   return (

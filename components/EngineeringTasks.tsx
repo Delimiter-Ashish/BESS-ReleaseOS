@@ -19,7 +19,7 @@ export interface TaskView {
   resolutionNote?: string;
   kind?: "dependency" | "consistency";
   /** Verified cross-document discrepancies (Project Guardian) covered by this review. */
-  consistency?: { findingId: string; quantity: string; a: { display: string; evidence: string; page?: number; doc?: string }; b: { display: string; evidence: string; page?: number; doc?: string } }[];
+  consistency?: { findingId: string; quantity: string; class?: string; a: { display: string; evidence: string; page?: number; doc?: string }; b: { display: string; evidence: string; page?: number; doc?: string } }[];
 }
 
 export default function EngineeringTasks({ siteId, tasks, canReview }: { siteId: string; tasks: TaskView[]; canReview: boolean }) {
@@ -55,12 +55,12 @@ export default function EngineeringTasks({ siteId, tasks, canReview }: { siteId:
               <span className="pill bg-orange-50 text-orange-800 ring-orange-200">{t.dependent}{t.dependentRev ? ` Rev ${t.dependentRev}` : ""}</span>
               {t.changedKeys.map((k) => <span key={k} className="font-mono text-[11px] text-slate-500">{k}</span>)}
             </div>
-            {t.kind === "consistency" && <span className="pill bg-red-50 text-red-700 ring-red-200">Cross-document discrepancy</span>}
+            {t.kind === "consistency" && <span className="pill bg-red-50 text-red-700 ring-red-200">{t.consistency?.[0]?.class === "verified_discrepancy" ? "Cross-document discrepancy" : "Needs engineering clarification"}</span>}
             <p className="text-xs text-slate-600">{t.explanation}</p>
             {(t.consistency ?? []).map((c) => (
               <div key={c.findingId} className="grid gap-2 rounded-md bg-red-50/50 p-2 text-[11px] sm:grid-cols-2">
                 {[c.a, c.b].map((o, i) => <div key={i}><span className="font-semibold">{o.doc ?? (i ? "Other document" : "Source")}{o.page ? ` p.${o.page}` : ""}: {o.display}</span><div className="italic text-slate-600">“{o.evidence}”</div></div>)}
-                <div className="text-slate-500 sm:col-span-2">Same {c.quantity} of the same equipment stated differently — engineer to decide which is current (not an incompatibility finding).</div>
+                <div className="text-slate-500 sm:col-span-2">{c.class === "verified_discrepancy" ? `Same ${c.quantity} of the same identified equipment stated differently — engineer to decide which is current.` : `Values differ for what appears to be the same equipment, but identity/interface is not established in both documents — needs engineering clarification, not a confirmed conflict.`}</div>
               </div>
             ))}
             {t.aiImpact && <p className="rounded-md bg-amber-50 p-2 text-[11px] text-amber-900"><b>Possible consequences (advisory):</b> {t.aiImpact}</p>}

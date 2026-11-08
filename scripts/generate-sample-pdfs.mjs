@@ -9,7 +9,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 const out = join(dirname(fileURLToPath(import.meta.url)), "..", "sample-docs");
 const FIXED = new Date("2026-01-01T00:00:00Z");
 
-async function makePdf(fileName, title, pages) {
+async function makePdf(fileName, title, pages, banner = "SYNTHETIC SAMPLE - FICTIONAL MANUFACTURER - NOT FOR CONSTRUCTION") {
   const doc = await PDFDocument.create();
   doc.setTitle(title);
   doc.setAuthor("SYNTHETIC SAMPLE");
@@ -22,7 +22,7 @@ async function makePdf(fileName, title, pages) {
   pages.forEach((lines, i) => {
     const page = doc.addPage([612, 792]);
     page.drawRectangle({ x: 36, y: 748, width: 540, height: 22, color: rgb(0.85, 0.1, 0.1) });
-    page.drawText("SYNTHETIC SAMPLE - FICTIONAL MANUFACTURER - NOT FOR CONSTRUCTION", { x: 44, y: 755, size: 10, font: bold, color: rgb(1, 1, 1) });
+    page.drawText(banner, { x: 44, y: 755, size: 10, font: bold, color: rgb(1, 1, 1) });
     let y = 715;
     for (const line of lines) {
       const isHeading = line.startsWith("# ");
@@ -148,3 +148,53 @@ await makePdf("SYNTHETIC_Interconnection_Application_RevB.pdf", "Interconnection
     "Export limit: 250 kW AC",
   ],
 ]);
+
+// Submission Studio: real PDF bytes for the hero site's seeded AHJ documents (previously text placeholders).
+// These are SYNTHETIC EQORE-prepared summaries/placeholders — NOT manufacturer documents and NOT certifications.
+const NOT_MFR = "SYNTHETIC - EQORE DEMO SUMMARY - NOT A MANUFACTURER DOCUMENT";
+const PLACEHOLDER = "SYNTHETIC PLACEHOLDER - NOT A CERTIFICATION - NOT FOR SUBMISSION";
+await makePdf("SYNTHETIC_Plan_Set_RevB.pdf", "Engineered Plan Set Rev B", [
+  [
+    "# Engineered Plan Set - Century Tywood J3 Corp (synthetic)",
+    "Engineer of record: J. Doe, PE (fictional)",
+    "Revision: B",
+    "AC System Size: 250kW",
+    "DC System Size: 760kWh",
+    "",
+    "# Revision block",
+    "A 12/01/2025 Issued for permit",
+    "B 01/11/2026 Change inverters to 2 x Dynapower MPS125",
+  ],
+  [
+    "# ESS-13.0 Single-Line Diagram Notes (synthetic)",
+    "400A AC disconnect (ESS-13.0, synthetic)",
+    "480 VAC AC disconnect (ESS-13.0, synthetic)",
+    "Conductors and overcurrent protection per ESS-13.0 schedule (synthetic)",
+  ],
+], "SYNTHETIC SAMPLE - FICTIONAL ENGINEER - NOT FOR CONSTRUCTION");
+await makePdf("SYNTHETIC_Battery_Equipment_Summary.pdf", "Battery Equipment Summary", [[
+  "# Battery system - project equipment summary (synthetic)",
+  "Compiled by EQORE from the project plan set for demonstration. Not a manufacturer datasheet.",
+  "BESS: Gotion Edge 760",
+  "DC System Size: 760kWh",
+  "Chemistry: Lithium iron phosphate",
+]], NOT_MFR);
+await makePdf("SYNTHETIC_Inverter_Equipment_Summary.pdf", "Inverter Equipment Summary", [[
+  "# Inverter / PCS - project equipment summary (synthetic)",
+  "Compiled by EQORE from the project plan set for demonstration. Not a manufacturer datasheet.",
+  "Inverter Model: 2 x Dynapower MPS125",
+  "MPS125 125 kW",
+  "480 VAC 3-phase",
+]], NOT_MFR);
+for (const [file, title, what] of [
+  ["SYNTHETIC_UL9540_Listing_Placeholder.pdf", "UL 9540 Listing Placeholder", "UL 9540 system listing"],
+  ["SYNTHETIC_UL9540A_Report_Placeholder.pdf", "UL 9540A Report Placeholder", "UL 9540A fire test report"],
+  ["SYNTHETIC_SDS_Placeholder.pdf", "Safety Data Sheet Placeholder", "Safety data sheet (SDS)"],
+]) {
+  await makePdf(file, title, [[
+    `# ${what} - placeholder (synthetic)`,
+    "This page stands in for the real document in a software demonstration.",
+    "It is not a listing, test report, or safety data sheet and certifies nothing.",
+    "Obtain the actual document from the equipment supplier / certifier.",
+  ]], PLACEHOLDER);
+}

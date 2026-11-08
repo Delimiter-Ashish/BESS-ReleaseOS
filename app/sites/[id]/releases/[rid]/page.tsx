@@ -5,7 +5,7 @@ import { ChangeTable, Hash } from "@/components/ui";
 import { pinnedFromSnapshot } from "@/lib/engine-adapter";
 import { compareSnapshots, frozenRevisions, releaseStatus } from "@/lib/release";
 import { REQ_BY_ID } from "@/lib/requirements";
-import { getRelease, getReleases, getSite, verifyRelease } from "@/lib/store";
+import { getRelease, getReleases, getSite, verifyRelease, studioOf } from "@/lib/store";
 import type { DecisionRecord, EngineeringTask } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ export default function ReleasePage({ params, searchParams }: { params: { id: st
   const rel = getRelease(params.rid);
   if (!site || !rel?.snapshot) notFound();
   const snap = rel.snapshot;
+  const studio = studioOf(rel);
   const a = (snap.annotations ?? {}) as { templateName?: string; audience?: string; basis?: string; disclaimer?: string; signoff?: { name: string; roles: string[]; note: string; at: string }; decisions?: DecisionRecord[]; engineeringTasks?: EngineeringTask[] };
   const all = getReleases(site.id).filter((r) => r.templateId === rel.templateId).sort((x, y) => x.number - y.number);
   const other = searchParams.compare ? all.find((r) => r.id === searchParams.compare) : all.find((r) => r.number === rel.number - 1);
@@ -68,6 +69,29 @@ export default function ReleasePage({ params, searchParams }: { params: { id: st
             {all.filter((r) => r.id !== rel.id).map((r) => <Link key={r.id} href={`/sites/${site.id}/releases/${rel.id}?compare=${r.id}`} className={`rounded px-2 py-0.5 font-mono ${other?.id === r.id ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"}`}>R{r.number}</Link>)}
           </div>
         </section>
+
+        {studio && (
+          <section className="card space-y-3 p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-semibold">Submission package (frozen)</h2>
+              <span className="text-xs text-slate-500">{studio.purposeName} · recipient: <b>{studio.recipientLabel}</b> · assembled in Submission Studio</span>
+            </div>
+            <p className="text-xs text-slate-500">{studio.disclaimer}</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {studio.outputs.map((o) => (
+                <div key={o.groupId} className="rounded-lg bg-slate-50 p-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2"><a href={`/api/releases/${encodeURIComponent(rel.id)}/pdf?output=${encodeURIComponent(o.groupId)}`} className="btn-primary !py-1 !text-xs">⬇ {o.fileName}</a><span>{o.pageCount} pages</span></div>
+                  <div className="mt-1 font-mono text-[10px] text-slate-500">sha256 {o.sha256}</div>
+                  <ol className="mt-2 space-y-0.5">{o.entries.map((e) => <li key={e.order}>{e.order}. {e.name} Rev {e.revLabel} — pp. {e.startPage}–{e.startPage + e.pageCount - 1}{e.rendering === "slip_sheet" ? " (slip sheet)" : ""}</li>)}</ol>
+                  {o.warnings.map((w) => <div key={w} className="mt-1 text-amber-800">⚠ {w}</div>)}
+                </div>
+              ))}
+            </div>
+            <details className="text-xs"><summary className="cursor-pointer text-slate-600">Access decisions frozen at build time ({studio.policyDecisions.length})</summary>
+              <ul className="mt-1 space-y-0.5">{studio.policyDecisions.map((d) => <li key={d.revisionId}>{d.authorized ? "✓" : "✕"} {d.requirementId} → {studio.recipientLabel} · releasable to: {d.releaseTo.join(", ") || "nobody"} · rule by {d.ruleSetBy ?? "default"}{d.ruleSetAt ? ` (${d.ruleSetAt.slice(0, 10)})` : ""}</li>)}</ul>
+            </details>
+          </section>
+        )}
 
         {cmp && (
           <section className="card p-5">

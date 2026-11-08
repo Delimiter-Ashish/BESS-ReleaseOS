@@ -2,6 +2,7 @@
 // Sources: (1) the PDF text layer, line by line, when the revision has one; (2) otherwise its recorded facts.
 // For every value we record WHAT it refers to (equipment role, identifiers, interface side, rating vs nominal)
 // and HOW that was determined, so cross-document comparisons only compare like with like.
+import { classifyLines, REV_ENTRY } from "../sections";
 import type { Revision } from "../types";
 import type { EquipmentRole, InterfaceSide, Measure, Observation, Quantity } from "./types";
 
@@ -13,7 +14,6 @@ const ROLE_RULES: [EquipmentRole, RegExp][] = [
   ["battery", /\bbattery\b|\bdc bus\b|\bbess dc\b|\brack\b/i],
 ];
 const DOC_ROLE: Record<string, EquipmentRole> = { switchgear_datasheet: "switchgear", inverter_datasheet: "inverter", battery_datasheet: "battery" };
-const REV_HISTORY = /^(rev(ision)?\.?\s+)?[A-Z0-9]{1,3}\s+(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\b/i;
 const ID_RE = /\b(?!ESS-)(?:[A-Z]{2,5}-?\d{3,5}[A-Z]?|T\d)\b/g;
 
 const QTY_RES: { q: Quantity; re: RegExp }[] = [
@@ -52,7 +52,7 @@ function observe(rev: Revision, line: string, page: number | undefined, kind: Ob
   const out: Observation[] = [];
   const clean = line.replace(/\s+/g, " ").trim();
   if (!clean || clean.length > 240) return out;
-  if (REV_HISTORY.test(clean)) return out; // revision-block entries describe past changes, not current values
+  if (REV_ENTRY.test(clean)) return out; // revision-block entries describe past changes, not current values
   const own = roleOf(clean);
   const lineRole = own ?? (carry ? { role: carry.role, why: `preceding line “${carry.line.slice(0, 60)}”` } : undefined);
   const ownIds = Array.from(new Set(clean.match(ID_RE) ?? []));
@@ -87,13 +87,15 @@ export function observationsFor(rev: Revision): Observation[] {
   const docIds = Array.from(new Set(rev.facts.filter((f) => f.key === "equipment.model").flatMap((f) => (f.value.match(ID_RE) ?? [f.value.split(" ").pop() ?? ""]))).values()).filter(Boolean);
   const out: Observation[] = [];
   if (rev.textLayer && rev.textLayer.trim().length > 20) {
-    let page = 1;
+    // Split into pages, then classify lines so revision-history rows are skipped (shared with extraction).
+    const pages = rev.textLayer.split(/\f?\[page \d+\]\n?/).filter((p, i) => i > 0 || p.trim());
+    const lines: { line: string; page: number; history: boolean; first: boolean }[] = [];
+    pages.forEach((p, i) => classifyLines(p).forEach((l, j) => l.text && lines.push({ line: l.text, page: i + 1, history: l.revisionHistory, first: j === 0 })));
     let carry: (Carry & { left: number }) | undefined;
-    for (const raw of rev.textLayer.split("\n")) {
-      const pm = raw.match(/^\f?\[page (\d+)\]$/);
-      if (pm) { page = Number(pm[1]); carry = undefined; continue; }
-      const line = raw.replace(/\s+/g, " ").trim();
-      if (!line) continue;
+    let lastPage = 0;
+    for (const { line, page, history } of lines) {
+      if (page !== lastPage) { carry = undefined; lastPage = page; }
+      if (history) continue;
       out.push(...observe(rev, line, page, "text_layer", true, docIds, out.length, carry));
       // A line naming equipment (with no value of its own) sets the context for the next few lines on the page.
       const r = roleOf(line);

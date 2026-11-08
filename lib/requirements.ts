@@ -479,6 +479,13 @@ export const PACKAGE_TEMPLATES: PackageTemplate[] = [
     basis: "Interconnection tariff application requirements",
   },
   {
+    id: "planning",
+    name: "Planning board package",
+    audience: "Town planning board",
+    required: ["plan_set", "property_record", "site_photos"],
+    basis: "Illustrative site-plan review set (Submission Studio purpose: planning)",
+  },
+  {
     id: "closeout",
     name: "Commissioning & closeout package",
     audience: "AHJ + facility (NFPA 855 §6.1)",

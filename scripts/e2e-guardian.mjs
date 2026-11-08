@@ -86,7 +86,7 @@ try {
 
   // 5–6. Preflight compares it with the related drawing
   pf = await preflight(pm, "ahj_permit", useAi);
-  const disc = pf.findings.find((f) => f.consistencyClass === "verified_discrepancy" && f.affectedFiles.some((a) => a.requirementId === "plan_set"));
+  const disc = pf.findings.find((f) => f.consistencyClass === "needs_clarification" && f.affectedFiles.some((a) => a.requirementId === "plan_set"));
   assert.ok(disc, pf.findings.map(show).join("\n"));
   assert.equal(disc.evidence.length, 2);
   assert.ok(disc.evidence.some((e) => /600 VAC/.test(e.quote)) && disc.evidence.some((e) => /480 VAC AC disconnect/.test(e.quote)));
@@ -129,7 +129,7 @@ try {
   assert.equal((await call(`/api/sites/${H}/memory/${req.id}`, { cookie: eng2, method: "POST", json: { action: "resolve", note: "Rev A answers Fire comment 1" } })).status, 200);
   pf = await preflight(eng2, "ahj_permit");
   assert.equal(pf.canBuild, true, pf.findings.filter((f) => f.blocking).map(show).join("\n"));
-  assert.equal(pf.findings.filter((f) => f.consistencyClass === "verified_discrepancy" && !/Reviewed by an engineer/.test(f.title)).length, 0);
+  assert.equal(pf.findings.filter((f) => (f.consistencyClass === "verified_discrepancy" || f.consistencyClass === "needs_clarification") && !/Reviewed by an engineer/.test(f.title)).length, 0);
   ok("plan set Rev C (600 VAC) approved resolving the review (PM 403); ventilation plan approved; requirement resolved by R. Patel, PE (PM 403); preflight clear");
 
   // 9. Release 2; Release 1 preserved

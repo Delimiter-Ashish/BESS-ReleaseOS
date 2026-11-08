@@ -61,7 +61,14 @@ export function classifyPair(a: Observation, b: Observation, bridges: { primary:
         ? { class: "explained_difference", reason: `${where(rating)} gives an equipment rating (${fmt(rating)}) that is at or above the nominal value in ${where(nominal)} (${fmt(nominal)}).` }
         : { class: "potential_inconsistency", reason: `${where(rating)} rating (${fmt(rating)}) is below the nominal value stated in ${where(nominal)} (${fmt(nominal)}). Investigate which document is current.` };
     }
-    return { class: "verified_discrepancy", reason: `Both documents state the ${q} of the same ${eq}${ctx} and the values differ: ${fmt(a)} in ${where(a)} vs ${fmt(b)} in ${where(b)}. Engineer review required to determine which is correct.` };
+    // Verified only with identity AND interface evidence from BOTH documents.
+    const sharedId = a.identifiers.find((i) => b.identifiers.includes(i));
+    const sameSide = a.side === b.side; // both stated and equal, or both unstated
+    if (sharedId && sameSide) return { class: "verified_discrepancy", reason: `Both documents identify the same ${eq} (${sharedId})${a.side ? ` on the ${a.side} side` : ""} and state different ${q} values: ${fmt(a)} in ${where(a)} vs ${fmt(b)} in ${where(b)}. Engineer review required to determine which is correct.` };
+    const gap = !sharedId
+      ? `the documents do not share an equipment identifier (${a.identifiers.length ? a.identifiers.join("/") : "none"} vs ${b.identifiers.length ? b.identifiers.join("/") : "none"} — matched only by “${eq}”)`
+      : `the interface is not stated in both (${a.side ?? "unstated"} vs ${b.side ?? "unstated"})`;
+    return { class: "needs_clarification", reason: `${fmt(a)} in ${where(a)} vs ${fmt(b)} in ${where(b)} appear to describe the same ${eq}, but ${gap}. Needs engineering clarification — not a confirmed conflict.` };
   }
   if (a.equipment !== "unknown" && b.equipment !== "unknown") {
     if (q !== "voltage" || a.value === b.value) return undefined;
@@ -111,6 +118,6 @@ export function findConsistency(site: Site, opts: { view: "approved" | "candidat
       void ra; void rb;
     }
   }
-  const order = { verified_discrepancy: 0, potential_inconsistency: 1, insufficient_evidence: 2, explained_difference: 3, consistent: 4 } as const;
+  const order = { verified_discrepancy: 0, needs_clarification: 1, potential_inconsistency: 2, insufficient_evidence: 3, explained_difference: 4, consistent: 5 } as const;
   return { findings: Array.from(findings.values()).sort((x, y) => order[x.class] - order[y.class]), checkedPairs };
 }

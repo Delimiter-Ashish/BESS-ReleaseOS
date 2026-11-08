@@ -12,6 +12,9 @@ import type { ExtractionResult } from "./extract";
 import { affectedDependents, compareFacts, dependencyExplanation, materialChanges } from "./intelligence";
 import { REQ_BY_ID, TEMPLATE_BY_ID } from "./requirements";
 import { syncConsistencyTasks } from "./guardian/sync";
+import { AUDIENCES, RECIPIENT_LABEL, RECIPIENTS, ruleFor, seedHeroPolicy, type AccessRule, type Audience, type Recipient } from "./studio/access";
+import { studioCheck } from "./studio/check";
+import type { CombinedPdfOutput, StudioSelection } from "./studio/types";
 import { applicableItems } from "./memory/readiness";
 import { buildManifest, latestApproved, latestRelease, packageReadiness, revisionsOf } from "./release";
 import { clearState, loadState, saveBlob, saveState, type StoredFile } from "./persistence";
@@ -276,13 +279,14 @@ export function buildRelease(siteId: string, templateId: string, session: Sessio
   return rel;
 }
 
-function createRelease(site: Site, templateId: string, s: Pick<Session, "userId" | "name" | "roles">, note: string, token: string, builtAt: string, seeded = false) {
+function createRelease(site: Site, templateId: string, s: Pick<Session, "userId" | "name" | "roles">, note: string, token: string, builtAt: string, seeded = false, opts: { pinned?: Revision[]; annotations?: Record<string, unknown> } = {}) {
   const t = TEMPLATE_BY_ID[templateId];
   const ready = packageReadiness(site, t);
   const prev = latestRelease(db().releases, site.id, templateId);
   const number = (prev?.number ?? 0) + 1;
   const id = `${site.id}-${templateId}-R${number}`;
-  const pinned = ready.items.map((i) => i.approved!);
+  // Submission Studio passes an explicit, ordered selection (already verified); otherwise the checklist's approved revisions.
+  const pinned = opts.pinned ?? ready.items.map((i) => i.approved!);
   const items: PinnedItem[] = pinned.map((r) => ({ requirementId: r.requirementId, revisionId: r.id, revLabel: r.revLabel, fileName: r.fileName, sha256: r.sha256, approvedBy: r.approvedBy, approvedAt: r.approvedAt }));
   const signoff: DecisionRecord = seeded
     ? { id: `DEC-seed-${id}`, siteId: site.id, kind: "release_signoff", releaseId: id, taskIds: [], decision: "signed_off", reviewerId: s.userId, reviewerName: s.name, reviewerRoles: s.roles, note, at: builtAt, seeded: true }
@@ -294,8 +298,8 @@ function createRelease(site: Site, templateId: string, s: Pick<Session, "userId"
   const tasks = (site.engTasks ?? []).filter((et) => et.status === "resolved" && reqs.has(et.dependentRequirementId));
   const draft: Release = { id, siteId: site.id, templateId, number, items, openFlags: [], builtBy: s.name, builtById: s.userId, builtAt, note, manifestSha256: "" };
   const manifest = buildManifest(site, draft, prev); // computed once, frozen into the snapshot
-  const { documents: _docs, engTasks: _t, decisions: _d, communications: _c, memory: _m, ...siteRecord } = site;
-  void _docs; void _t; void _d; void _c; void _m;
+  const { documents: _docs, engTasks: _t, decisions: _d, communications: _c, memory: _m, accessPolicy: _p, ...siteRecord } = site;
+  void _docs; void _t; void _d; void _c; void _m; void _p;
   // Project-memory items that applied to this package are frozen with their sources (omitted when none, e.g. seeded R1).
   const projectMemory = applicableItems(site, templateId).map((m) => ({ id: m.id, kind: m.kind, title: m.title, status: m.status, requirementId: m.requirementId, sources: m.sources, confirmedBy: m.confirmedBy, confirmedAt: m.confirmedAt, resolvedBy: m.resolvedBy, resolvedAt: m.resolvedAt, resolutionNote: m.resolutionNote, resolvedRevisionId: m.resolvedRevisionId, resolvedRevisionSha256: m.resolvedRevisionSha256 }));
   const snapshot = sealRelease({
@@ -309,6 +313,7 @@ function createRelease(site: Site, templateId: string, s: Pick<Session, "userId"
       revisions: pinned.map(({ textLayer: _x, ...r }) => { void _x; return r; }),
       decisions, engineeringTasks: tasks, manifest,
       ...(projectMemory.length ? { projectMemory } : {}),
+      ...(opts.annotations ?? {}),
     },
   });
   const rel: Release = { ...draft, manifestSha256: snapshot.sha256, snapshot };
@@ -329,11 +334,77 @@ export function releaseZip(releaseId: string) {
     a.disclaimer ?? "", `snapshot sha256 ${s.sha256}`, "", "INDEX",
     ...s.manifest.flatMap((m, i) => [`${String(i + 1).padStart(2, "0")}. ${REQ_BY_ID[m.family]?.name ?? m.family} — Rev ${m.revisionLabel} — ${m.fileName}`, `    ${m.archivePath}`, `    sha256 ${m.sha256}`, `    approved by ${pins.find((p) => p.revisionId === m.versionId)?.approvedBy ?? "?"}`]),
   ];
-  const bytes = createReleaseZip(s, { "MANIFEST.json": Buffer.from(JSON.stringify(a.manifest ?? {}, null, 2)), "INDEX.txt": Buffer.from(lines.join("\n")) });
+  // Studio releases: the frozen combined PDFs travel with the originals (hash-checked).
+  const combined: Record<string, Uint8Array> = {};
+  for (const o of studioOf(rel)?.outputs ?? []) {
+    const f = getFile(o.fileId);
+    if (!f || f.sha256 !== o.sha256) throw new StoreError(500, `Integrity error: combined PDF ${o.fileName} does not match its recorded sha256`);
+    combined[`combined/${o.fileName}`] = f.bytes;
+  }
+  const bytes = createReleaseZip(s, { "MANIFEST.json": Buffer.from(JSON.stringify(a.manifest ?? {}, null, 2)), "INDEX.txt": Buffer.from(lines.join("\n")), ...combined });
   return { fileName: `${s.siteId}_${s.templateId}_R${rel.number}.zip`, bytes, sha256: sha256(Buffer.from(bytes)) };
 }
 
 export const verifyRelease = (rel: Release) => (rel.snapshot ? verifyReleaseSnapshot(rel.snapshot) : false);
+
+// ---------- Submission Studio ----------
+
+/** Studio metadata frozen into a release snapshot (annotations.studio). */
+export interface FrozenStudio {
+  purpose: string; purposeName: string; recipient: Recipient; recipientLabel: string; templateId: string;
+  groups: { id: string; name: string; items: { order: number; revisionId: string; requirementId: string; revLabel: string; fileName: string; sha256: string }[] }[];
+  policyDecisions: { requirementId: string; revisionId: string; recipient: Recipient; authorized: boolean; view: string[]; releaseTo: string[]; ruleSetBy?: string; ruleSetAt?: string; ruleNote?: string; isDefault: boolean }[];
+  outputs: CombinedPdfOutput[];
+  checkToken: string;
+  disclaimer: string;
+}
+export const studioOf = (rel: Release) => (rel.snapshot?.annotations?.studio as FrozenStudio | undefined);
+
+/**
+ * Commit a Submission Studio release. Re-runs the full check synchronously: the token must still match (nothing
+ * changed while PDFs were generated) and there must be zero blockers. Engineer signoff with a note is required.
+ */
+export function commitStudioRelease(siteId: string, sel: StudioSelection, session: Session, note: string | undefined, token: string | undefined, builtAt: string, outputs: CombinedPdfOutput[]) {
+  requireEngineer(session);
+  const text = requireNote(note, "Release signoff");
+  const site = getSite(siteId);
+  if (!site) throw new StoreError(404, "site not found");
+  const check = studioCheck(site, db().releases, sel, bytesFor);
+  if (!token || token !== check.token) throw new StoreError(409, "Selection, documents or access policy changed since the check — run the check again", { token: check.token });
+  if (!check.canGenerate) throw new StoreError(409, `Blocked: ${check.blockers.map((b) => b.message).join("; ")}`, { blockers: check.blockers });
+  const pinned = check.groups.flatMap((g) => g.documents.map((d) => findRevision(site, d.revisionId)!));
+  const p = check.purpose;
+  const studio: FrozenStudio = {
+    purpose: p.id, purposeName: p.name, recipient: p.recipient, recipientLabel: RECIPIENT_LABEL[p.recipient], templateId: p.templateId,
+    groups: check.groups.filter((g) => g.documents.length).map((g) => ({ id: g.id, name: g.name, items: g.documents.map((d, i) => ({ order: i + 1, revisionId: d.revisionId, requirementId: d.requirementId, revLabel: d.revLabel, fileName: d.fileName, sha256: d.sha256 })) })),
+    policyDecisions: pinned.map((r) => { const rule = ruleFor(site, r.requirementId); return { requirementId: r.requirementId, revisionId: r.id, recipient: p.recipient, authorized: rule.releaseTo.includes(p.recipient), view: rule.view, releaseTo: rule.releaseTo, ruleSetBy: rule.setBy, ruleSetAt: rule.setAt, ruleNote: rule.note, isDefault: rule.isDefault }; }),
+    outputs, checkToken: check.token,
+    disclaimer: "Combined PDFs are assembled copies for submission convenience; originals are retained unchanged. Not a certification of code compliance.",
+  };
+  if (studio.policyDecisions.some((d) => !d.authorized)) throw new StoreError(403, "A selected document is not authorized for this recipient");
+  for (const o of outputs) { const f = getFile(o.fileId); if (!f || f.sha256 !== o.sha256) throw new StoreError(500, `Combined PDF ${o.fileName} missing or altered`); }
+  const expected = check.nextReleaseId;
+  const rel = createRelease(site, p.templateId, session, text, check.readinessToken, builtAt, false, { pinned, annotations: { studio } });
+  if (rel.id !== expected) throw new StoreError(409, "Release numbering changed during generation — retry");
+  persist();
+  return rel;
+}
+
+/** Record an access-policy rule for a document type (EQORE only; note required; history kept). */
+export function setAccessRule(siteId: string, input: { requirementId?: string; view?: string[]; releaseTo?: string[]; note?: string }, session: Session) {
+  if (session.role !== "eqore") throw new StoreError(403, `${session.name} cannot change the document access policy`);
+  const text = requireNote(input.note, "Changing the access policy");
+  const site = getSite(siteId);
+  if (!site) throw new StoreError(404, "site not found");
+  if (!input.requirementId || !REQ_BY_ID[input.requirementId]) throw new StoreError(400, "Unknown document type");
+  const view = Array.from(new Set((input.view ?? []).filter((a): a is Audience => (AUDIENCES as string[]).includes(a))));
+  const releaseTo = Array.from(new Set((input.releaseTo ?? []).filter((r): r is Recipient => (RECIPIENTS as string[]).includes(r))));
+  if (!view.includes("eqore_staff") && !view.includes("engineer")) throw new StoreError(400, "EQORE staff or engineers must retain visibility");
+  const rule: AccessRule = { requirementId: input.requirementId, view, releaseTo, setById: session.userId, setBy: session.name, setAt: nowIso(), note: text };
+  (site.accessPolicy ??= []).push(rule);
+  persist();
+  return rule;
+}
 
 export function resetStore() {
   clearState();
@@ -350,6 +421,7 @@ export function reloadFromDisk() {
 // ---------- seed finalization: real decisions, explicit tasks, sealed R1 ----------
 const SEED_ENGINEER = { userId: "seed-engineer", name: "EQORE engineer (seeded history)", roles: ["eqore", "engineer"] };
 function finalizeSeed(d: DB) {
+  seedHeroPolicy(d.sites[0], d.sites[0].documents.map((x) => x.uploadedAt).sort()[0] ?? nowIso());
   for (const site of d.sites) {
     site.decisions ??= [];
     site.engTasks ??= [];

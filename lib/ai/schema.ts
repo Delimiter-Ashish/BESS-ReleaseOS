@@ -3,6 +3,7 @@
 // against the PDF text layer before anything is stored.
 import { FACT_KEYS } from "../facts";
 import { findQuotePage, type TextLayer } from "../pdf";
+import { quoteOnlyInRevisionHistory } from "../sections";
 import { DOCUMENT_TYPES as REQUIREMENTS } from "../requirements";
 import type { Fact } from "../types";
 
@@ -24,6 +25,9 @@ ACCURACY RULES:
   "ambiguous" if the document states conflicting values (explain in note).
 - confidence in [0,1]. Use lower confidence for scans, drawings and tables that are hard to read.
 - If the document lists a revision history, revisionLabel is the CURRENT revision of this document, not older entries.
+- Revision-history / revision-block / change-log rows describe PAST changes (e.g. "B 01/11/2026 Change inverters to
+  2 x MPS125"). NEVER take ratings, equipment, models, manufacturers or quantities from those rows; use only the
+  document's current content (ratings tables, notes, drawings). Facts quoted from revision rows are discarded.
 - Prefer the main ratings table / nameplate data over narrative mentions for ratings.`;
 
 export function userPrompt(siteName: string, siteFacts: string, textLayer?: string) {
@@ -101,6 +105,8 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u
 const clamp01 = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.5);
 const strList = (v: unknown, n = 20, max = 300) => (Array.isArray(v) ? v.map((x) => str(x, max)).filter(Boolean).slice(0, n) : []);
 const validIds = new Set(REQUIREMENTS.map((r) => r.id));
+/** Keys that may legitimately be read from a revision table (the document's own revision label/date). */
+const HISTORY_OK = new Set(["revision.label", "doc.date"]);
 
 /** Validate + ground model output. Throws on structurally malformed output. */
 export function groundExtraction(raw: unknown, layer: TextLayer, origin: Fact["origin"]) {
@@ -109,11 +115,14 @@ export function groundExtraction(raw: unknown, layer: TextLayer, origin: Fact["o
   const warnings = strList(r.warnings);
   const facts: Fact[] = [];
   const seen = new Set<string>();
+  const fromHistory: string[] = [];
   for (const f of r.facts.slice(0, 60)) {
     if (!f || typeof f !== "object" || !(f.key in FACT_KEYS)) continue;
     const value = str(f.value, 200);
     if (!value) continue;
     const evidence = str(f.evidence, 300) || undefined;
+    // Section check: a value quoted only from revision-history rows is a past change, not a current fact.
+    if (layer.hasText && !HISTORY_OK.has(f.key) && quoteOnlyInRevisionHistory(layer.pages, evidence)) { fromHistory.push(`${FACT_KEYS[f.key]} “${value}”`); continue; }
     const claimedPage = Number.isInteger(f.page) && (f.page as number) >= 1 && (f.page as number) <= layer.pageCount ? (f.page as number) : undefined;
     const foundOn = findQuotePage(layer, evidence);
     let page: number | undefined, pageVerified = false, note = str(f.note, 300) || undefined;
@@ -143,6 +152,7 @@ export function groundExtraction(raw: unknown, layer: TextLayer, origin: Fact["o
       evidence, page, pageVerified, evidenceVerified: !!foundOn, confidence: clamp01(f.confidence), status, origin, note,
     });
   }
+  if (fromHistory.length) warnings.push(`Ignored ${fromHistory.length} value(s) quoted from the revision history (past changes, not current facts): ${fromHistory.slice(0, 5).join(", ")}`);
   // Conflicting values for one key → ambiguous.
   for (const key of Array.from(new Set(facts.map((f) => f.key)))) {
     const same = facts.filter((f) => f.key === key);

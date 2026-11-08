@@ -32,6 +32,7 @@ npm run e2e:memory                         # 17 project-memory checks; starts it
 E2E_PROVIDER=openai npm run e2e:memory     # same scenario with real OpenAI calls (synthetic email + PDF)
 npm run e2e:guardian                       # Project Guardian demo (16 checks incl. restart + transformer negative test)
 E2E_PROVIDER=openai npm run e2e:guardian   # same, with live OpenAI extraction + advisory AI review
+npm run e2e:studio                         # Submission Studio demo (13 checks: PDFs, hashes, access policy, restart)
 node scripts/openai-contract.mjs           # OpenAI provider wiring vs a mock Responses endpoint (no key needed; needs a prior build)
 ```
 
@@ -94,6 +95,45 @@ requirement → build R2 (pins the ventilation plan). `SYNTHETIC_Injection_Email
 | `GET /api/sites/:id/releases` | signed in | — | existing shape + `advisories`; issues carry `source`, `responsibleParty`, `nextAction` |
 
 Build a release with the `token` from the report (`POST /api/sites/:id/releases { templateId, note, readinessToken }`).
+
+## Submission Studio — select → verify → approve → combined PDF release
+
+`/sites/S-1001/studio` (button on the site page). Typed contract: `lib/studio/types.ts`.
+
+1. **Purpose**: AHJ permit, planning board, utility interconnection, or custom (any checklist + any recipient).
+2. **Select**: every document with type, revision, approval status (current/superseded/pending), source, hash and
+   access policy. Add/remove, reorder, and split into **one or more combined PDFs** (default: plans vs equipment).
+3. **Verify** (`POST /studio/check`, read-only): the deterministic release gate (missing documents, confirmed
+   requirements, pending/outdated revisions, engineering and cross-document reviews) **plus** selection checks
+   (required not selected, unapproved or superseded revision selected, duplicates), **recipient authorization**,
+   encrypted sources; warnings for non-PDF sources, signatures/forms that merging may alter, and Guardian findings.
+   Each issue has its source/evidence and a concrete fix.
+4. **Approve**: an engineer signs off with a note. The selection is re-verified (token) before and after PDF generation.
+5. **Generate**: actual approved PDF bytes are merged in order behind a cover/index (document, revision, file,
+   SHA-256, page range). Non-PDF sources get a labeled slip sheet. The result is re-opened and its page count verified.
+   Combined PDFs are stored content-addressed; the sealed release snapshot freezes groups/order, selected versions,
+   every access decision and each output hash. The ZIP export carries the untouched originals plus `combined/*.pdf`.
+
+**Access policy** (`lib/studio/access.ts`): per document type, `view` (EQORE staff, engineers, suppliers, authority
+reviewers, facility) is separate from `releaseTo` (AHJ, planning, utility, supplier, owner). Default: EQORE-only
+visibility, releasable to **nobody**. EQORE users change rules with a note (history kept). Enforced server-side on
+file downloads, document pages, release ZIP/PDF downloads (EQORE, or the addressed recipient of a studio package
+whose documents were all authorized), and release generation. Seeded history (R1) has no frozen access decisions
+and stays EQORE-only.
+
+| Method & path | Who | Purpose |
+|---|---|---|
+| `GET /api/sites/:id/studio?purpose=` | EQORE | documents (+policy), default groups, purposes |
+| `POST /api/sites/:id/studio/check` `{ purpose, templateId?, recipient?, groups }` | EQORE | `{ check: StudioCheck, preflight }` |
+| `POST /api/sites/:id/studio/release` `{ …selection, note, token }` | engineer | sealed release + combined PDF outputs |
+| `GET /api/releases/:id/pdf?output=<groupId>` | EQORE / authorized recipient | frozen combined PDF (hash-checked) |
+| `GET/POST /api/sites/:id/access` | EQORE | policy table / record a rule `{ requirementId, view, releaseTo, note }` |
+
+**Correctness fixes in this release**: revision-history/revision-block rows are detected by section (`lib/sections.ts`)
+and never become current facts (rules extractor, AI grounding — values quoted from them are dropped with a warning —
+and Guardian observations). A cross-document difference is a *verified discrepancy* only when both documents share
+an equipment identifier and interface; otherwise it is *needs engineering clarification* (still routed to an engineer
+review, never called a conflict). Signed-out visitors see blocker counts, not descriptions, reviews or decision notes.
 
 ## Project Guardian — cross-source preflight
 
@@ -166,6 +206,8 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 |---|---|
 | `lib/store.ts` | The single authoritative store; all mutations and rules |
 | `lib/persistence.ts` | Atomic JSON snapshot + content-addressed upload bytes; integrity-checked reload |
+| `lib/studio/*` | Submission Studio: access policy, selection checks, combined PDF builder, generation |
+| `lib/sections.ts` | Revision-history section detection shared by extraction and Guardian |
 | `lib/guardian/*` | Evidence graph, cross-document consistency, preflight, Time Machine (contract: `types.ts`) |
 | `lib/memory/*` | Communication intelligence, project register, pre-submission report (contract: `types.ts`) |
 | `lib/engine-adapter.ts` | Revision/Fact/PinnedItem/decisions/tasks ⇄ release-core models; seals snapshots (lossless annotations) |
@@ -180,6 +222,8 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 - **Single-process JSON persistence** (survives restarts; not for multiple instances or high write volume).
 - Project-memory suggestions depend on the model; the deterministic fallback is a keyword scan and can miss items.
 - Demo auth with fixed passcodes; replace with SSO/OIDC.
-- Seeded documents other than the switchgear Rev A use deterministic placeholder bytes (labeled in ZIPs/UI).
+- Hero AHJ documents are synthetic PDFs (EQORE summaries / labeled placeholders — not manufacturer documents or
+  certifications); other seeded documents use deterministic placeholder bytes (slip sheets in combined PDFs).
+- Combined PDFs copy pages: digital signatures will not validate and form fields may not survive (warned; originals kept).
 - Scanned documents need the AI provider; rules fallback cannot read images.
 - AI output is decision support only; nothing here certifies NFPA 855, UL, NEC or AHJ compliance.

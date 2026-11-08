@@ -35,6 +35,8 @@ export default async function SitePage({ params }: { params: { id: string } }) {
   if (!site) notFound();
   const session = getSession();
   const canReview = can(session, "review");
+  // Blocker descriptions, review details, engineering tasks and decision notes are internal: signed-in users only.
+  const signedIn = session.role !== "public";
   const ev = evaluateSite(site);
   const si = stageIndex(site.stage);
   const releases = getReleases(site.id);
@@ -67,7 +69,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
   const tasks: TaskView[] = engTasks.filter((t) => t.status !== "superseded").map((t) => {
     const src = site.documents.find((d) => d.id === t.sourceRevisionId);
     const dep = t.dependentRevisionId ? site.documents.find((d) => d.id === t.dependentRevisionId) : undefined;
-    return { id: t.id, source: name(t.sourceRequirementId), sourceRev: src?.revLabel ?? "?", sourceApproved: src?.status === "approved" && latestApproved(site, t.sourceRequirementId)?.id === src.id, dependent: name(t.dependentRequirementId), dependentRev: dep?.revLabel, changedKeys: t.changedKeys, explanation: t.explanation, aiImpact: t.aiImpact, status: t.status, resolvedBy: t.resolvedBy, resolvedAt: t.resolvedAt, resolution: t.resolution, resolutionNote: t.resolutionNote, kind: t.kind, consistency: t.consistency?.map((c) => { const da = site.documents.find((d) => d.id === c.a.revisionId), db = site.documents.find((d) => d.id === c.b.revisionId); return { findingId: c.findingId, quantity: c.quantity, a: { ...c.a, doc: da ? `${name(da.requirementId)} Rev ${da.revLabel}` : undefined }, b: { ...c.b, doc: db ? `${name(db.requirementId)} Rev ${db.revLabel}` : undefined } }; }) };
+    return { id: t.id, source: name(t.sourceRequirementId), sourceRev: src?.revLabel ?? "?", sourceApproved: src?.status === "approved" && latestApproved(site, t.sourceRequirementId)?.id === src.id, dependent: name(t.dependentRequirementId), dependentRev: dep?.revLabel, changedKeys: t.changedKeys, explanation: t.explanation, aiImpact: t.aiImpact, status: t.status, resolvedBy: t.resolvedBy, resolvedAt: t.resolvedAt, resolution: t.resolution, resolutionNote: t.resolutionNote, kind: t.kind, consistency: t.consistency?.map((c) => { const da = site.documents.find((d) => d.id === c.a.revisionId), db = site.documents.find((d) => d.id === c.b.revisionId); return { findingId: c.findingId, quantity: c.quantity, class: c.class, a: { ...c.a, doc: da ? `${name(da.requirementId)} Rev ${da.revLabel}` : undefined }, b: { ...c.b, doc: db ? `${name(db.requirementId)} Rev ${db.revLabel}` : undefined } }; }) };
   });
 
   const packages = PACKAGE_TEMPLATES.map((t) => {
@@ -82,7 +84,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
     <>
       <AppHeader />
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500"><span><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</span><span className="flex gap-2"><Link href={`/sites/${site.id}/guardian`} className="pill bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-700">Project Guardian · Run Preflight →</Link><Link href={`/sites/${site.id}/memory`} className="pill bg-indigo-50 text-indigo-700 ring-indigo-200 hover:bg-indigo-100">Project memory &amp; pre-submission check →</Link></span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500"><span><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</span><span className="flex gap-2"><Link href={`/sites/${site.id}/studio`} className="pill bg-emerald-600 text-white ring-emerald-600 hover:bg-emerald-700">Submission Studio →</Link><Link href={`/sites/${site.id}/guardian`} className="pill bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-700">Project Guardian · Run Preflight →</Link><Link href={`/sites/${site.id}/memory`} className="pill bg-indigo-50 text-indigo-700 ring-indigo-200 hover:bg-indigo-100">Project memory &amp; pre-submission check →</Link></span></div>
 
         <section className="card flex flex-wrap items-start justify-between gap-6 p-5">
           <div className="space-y-1">
@@ -130,14 +132,22 @@ export default async function SitePage({ params }: { params: { id: string } }) {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <UploadPanel siteId={site.id} canUpload={can(session, "upload")} userName={session.name} />
-            <ReviewPanel reviews={reviews} canReview={canReview} userName={session.name} />
-            <EngineeringTasks siteId={site.id} tasks={tasks} canReview={canReview} />
+            {signedIn ? (
+              <>
+                <ReviewPanel reviews={reviews} canReview={canReview} userName={session.name} />
+                <EngineeringTasks siteId={site.id} tasks={tasks} canReview={canReview} />
+              </>
+            ) : (reviews.length > 0 || tasks.some((t) => t.status === "open")) && (
+              <div className="card p-4 text-sm text-slate-600">{reviews.length} revision review(s) and {tasks.filter((t) => t.status === "open").length} engineering review(s) are open. Sign in to view details.</div>
+            )}
           </div>
           <aside className="space-y-4">
             <div className="card p-4">
               <div className="text-sm font-semibold">Audit trail</div>
               <p className="mb-2 text-[11px] text-slate-500">Human decisions recorded with server-side identity.</p>
-              {audit.length === 0 ? (
+              {!signedIn ? (
+                <div className="text-xs text-slate-500">Sign in to view decisions and reviewer notes.</div>
+              ) : audit.length === 0 ? (
                 <div className="text-xs text-slate-500">No decisions since the demo started ({storeStartedAt().slice(11, 16)} UTC). Seeded history is included in release snapshots.</div>
               ) : (
                 <ol className="relative space-y-3 border-l border-slate-200 pl-4">
@@ -159,7 +169,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
                 <li>AI extracts facts and explains possible impacts. It never approves, resolves or releases.</li>
                 <li>Material changes and dependency reviews block new releases until an authorized engineer records a decision.</li>
                 <li>Releases freeze approved bytes, hashes and approvals. Older releases are never modified.</li>
-                <li>In-memory demo store: restarting the server resets to seed data.</li>
+                <li>State is persisted on the server (single process); release history survives restarts.</li>
               </ul>
             </div>
           </aside>
@@ -211,7 +221,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
                       </div>
                     </div>
                   )}
-                  <BuildRelease siteId={site.id} templateId={t.id} nextNumber={(last?.number ?? 0) + 1} canBuild={ready.canBuild} canSign={can(session, "release")} token={ready.token} blockers={ready.issues.map((x) => x.message)} />
+                  <BuildRelease siteId={site.id} templateId={t.id} nextNumber={(last?.number ?? 0) + 1} canBuild={ready.canBuild} canSign={can(session, "release")} token={ready.token} blockers={signedIn ? ready.issues.map((x) => x.message) : ready.issues.length ? [`${ready.issues.length} blocker(s) — sign in to view details`] : []} />
                 </div>
               </div>
             ))}

@@ -35,7 +35,12 @@ export interface Observation {
   contextReason: string; // how equipment/side were determined
 }
 
-export type FindingClass = "verified_discrepancy" | "potential_inconsistency" | "explained_difference" | "consistent" | "insufficient_evidence";
+/**
+ * verified_discrepancy  — same quantity, SAME equipment identifier on both sides, same (or both unstated) interface
+ * needs_clarification   — values differ for what appears to be the same equipment, but identity or interface is
+ *                         not established by both documents (e.g. "AC disconnect" vs "NSG-4000"); engineer to clarify
+ */
+export type FindingClass = "verified_discrepancy" | "needs_clarification" | "potential_inconsistency" | "explained_difference" | "consistent" | "insufficient_evidence";
 
 export interface AiReview {
   model: string;
