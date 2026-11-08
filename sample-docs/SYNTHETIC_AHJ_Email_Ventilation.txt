@@ -1,0 +1,18 @@
+From: Lt. Dana Okafor, Holliston Fire Department (SYNTHETIC) <plan.review@example.invalid>
+To: A. Rivera <arivera@example.invalid>
+Date: Thu, 05 Nov 2026 09:14:00 -0500
+Subject: RE: 79 Lowland St BESS permit - plan review comments (SYNTHETIC)
+
+Hi Alex,
+
+Thanks for the permit submission for the 760 kWh battery system at 79 Lowland St.
+
+Fire plan review comment 1: Please provide an updated ventilation plan showing the exhaust rate and the gas-detection interlock for the battery enclosure. We cannot approve the permit until the updated ventilation plan is submitted.
+
+Comment 2: Can you confirm whether the emergency response plan will list the 24/7 monitoring company contact?
+
+I will schedule the site walk once the revised documents are in.
+
+Regards,
+Lt. Dana Okafor
+Holliston Fire Department - Plan Review (fictional person, synthetic demo data)

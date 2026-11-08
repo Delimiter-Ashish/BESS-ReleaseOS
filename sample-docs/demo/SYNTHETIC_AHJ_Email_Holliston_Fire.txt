@@ -1,0 +1,11 @@
+SYNTHETIC DEMO COMMUNICATION - NOT A REAL AHJ MESSAGE
+From: Fire Prevention Office, Town of Holliston (fictional sender)
+To: EQORE project team
+Date: 2026-11-05
+Subject: Century Tywood J3 Corp - ESS permit pre-submission comments
+
+1. Please include the UL 9540A fire test summary with the permit package.
+2. Provide a site plan showing 10 ft separation from the building egress door.
+3. Include a signed emergency response plan before the final inspection.
+
+This message is synthetic and was written for software demonstration only.

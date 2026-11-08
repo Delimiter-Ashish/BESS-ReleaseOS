@@ -1,0 +1,17 @@
+project_id,requirement_id,rev,key,label,value,unit,evidence,page
+S-1003,plan_set,A,rating.power_kw,Power (kW),250,kW,AC System Size: 250 kW,1
+S-1003,plan_set,A,rating.energy_kwh,Energy (kWh),500,kWh,DC System Size: 500 kWh,1
+S-1003,plan_set,A,revision.label,Revision,A,,Revision: A,1
+S-1003,inverter_datasheet,A,equipment.model,Model,CPE-250X,,Model: CPE-250X,1
+S-1003,inverter_datasheet,A,rating.power_kw,Power (kW),250,kW,Rated power: 250 kW,1
+S-1003,inverter_datasheet,A,rating.voltage_v,Rated voltage (V),480,VAC,"Rated voltage: 480 VAC, 3-phase",1
+S-1003,inverter_datasheet,A,listing.standard,Listing standard (UL),UL 1741,,Listing standard: UL 1741,1
+S-1004,battery_datasheet,A,equipment.model,Model,LES-E1000,,,
+S-1004,battery_datasheet,A,rating.energy_kwh,Energy (kWh),860,kWh,,
+S-1004,battery_datasheet,A,rating.power_kw,Power (kW),500,kW,,
+S-1004,battery_datasheet,B,equipment.model,Model,LES-E1000,,Model: LES-E1000,1
+S-1004,battery_datasheet,B,rating.energy_kwh,Energy (kWh),1000,kWh,Energy: 1000 kWh,1
+S-1004,battery_datasheet,B,rating.power_kw,Power (kW),500,kW,Rated power: 500 kW,1
+S-1004,battery_datasheet,B,revision.label,Revision,B,,Revision: B,1
+S-1005,ul9540a_report,A,listing.standard,Listing standard (UL),UL 9540A,,UL 9540A Test Method - Summary of Results,1
+S-1005,ul9540a_report,A,revision.label,Revision,A,,Revision: A,1

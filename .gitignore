@@ -1,8 +1,36 @@
-.venv/
+# dependencies
 node_modules/
-.next/
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# env (keep the example)
 .env
 .env.*
 !.env.example
+
+# misc
 .DS_Store
+*.pem
+.venv/
+.vercel
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# generated
 packages/release-core/demo-output/
+
+# durable app state (lib/persistence.ts)
+/.data/
+/.data-demo/
