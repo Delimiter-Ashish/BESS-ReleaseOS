@@ -1,4 +1,222 @@
-# BESS ReleaseOS — engineering document intelligence & version-locked releases
+<div align="center">
+
+<img src="docs/readme/banner.png" alt="ReleaseOS: Know what's missing. Prove what's ready." width="100%">
+
+<br>
+
+[![Live demo](https://img.shields.io/badge/▶_LIVE_DEMO-Try_it_now-22D3EE?style=for-the-badge&labelColor=0A1324)](https://releaseos-production-e05b.up.railway.app/)
+[![MIT Energy & Climate Hack 2026](https://img.shields.io/badge/MIT_Energy_&_Climate_Hack-2026-F5B547?style=for-the-badge&labelColor=0A1324)](#)
+[![EQORE Option 4](https://img.shields.io/badge/EQORE-Option_4_·_Compliance_at_scale-34D399?style=for-the-badge&labelColor=0A1324)](#)
+
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI_Responses_API-412991?style=flat-square&logo=openai&logoColor=white)
+![Node 22](https://img.shields.io/badge/Node-22-339933?style=flat-square&logo=nodedotjs&logoColor=white)
+![Railway](https://img.shields.io/badge/Deployed_on-Railway-0B0D0E?style=flat-square&logo=railway&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-35%2F35_core_·_E2E_suites-34D399?style=flat-square)
+
+### What if the biggest risk to a battery project isn't the equipment, but a requirement nobody remembered?
+
+**ReleaseOS turns scattered engineering documents and stakeholder emails into evidence-backed, engineer-approved submission packages.**
+
+[**▶ Open the live demo**](https://releaseos-production-e05b.up.railway.app/) · [**🎬 2-minute video**](#-watch-it-work) · [**🧠 How it works**](#-how-it-works-in-60-seconds) · [**👥 Authors**](#-authors)
+
+</div>
+
+---
+
+## 🔋 The problem, in plain English
+
+A commercial battery project needs **~30 documents**: plan sets, equipment datasheets, permits, utility forms, emergency plans. They live in **Drive folders, email threads and old revisions**, and they come from **many people**: suppliers, engineers, the fire department, the utility.
+
+> **“The worst thing that can happen is realizing halfway through the process that we missed or forgot something.”**
+> — Jorge, EQORE (sponsor interview)
+
+One forgotten fire-department email or one outdated drawing means the permit gets sent back, work is redone, and the battery starts saving money and cutting peak-grid demand **months later**.
+
+## 💡 What ReleaseOS does
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 📁 A shared folder…
+- stores files
+- shows the *latest upload*
+- leaves emails in someone’s inbox
+- lets you send an incomplete package
+- forgets what was submitted last time
+
+</td>
+<td width="50%" valign="top">
+
+### ⚡ ReleaseOS…
+- knows **which revision is approved, and why**
+- reads every PDF and **proves each fact with a quote + page**
+- turns an AHJ email into a **tracked requirement with an owner**
+- **refuses to release** while anything is missing
+- **seals** every package with SHA-256 hashes, forever
+
+</td>
+</tr>
+</table>
+
+> **AI finds the evidence. Deterministic checks protect the submission. Engineers make the decision.**
+
+---
+
+## 🎬 Watch it work
+
+<table>
+<tr>
+<td width="50%"><img src="docs/readme/guardian-scan.gif" alt="Project Guardian scanning a permit package and finding 3 blockers"></td>
+<td width="50%"><img src="docs/readme/release-sealed.gif" alt="An engineer signs off and Release R2 is sealed into two combined PDFs"></td>
+</tr>
+<tr>
+<td align="center"><b>① Guardian X-ray</b>: “3 blockers, here’s why”</td>
+<td align="center"><b>② Engineer signs off</b>: 8 documents → 2 sealed PDFs</td>
+</tr>
+</table>
+
+<div align="center">
+
+**[▶ Try it yourself on the live demo](https://releaseos-production-e05b.up.railway.app/)** · sign in from the top-right menu (demo identities, passcodes shown)
+
+[<!-- Add the video link here: [🎬 Full 2-minute walkthrough](https://youtu.be/XXXX) -->](https://drive.google.com/file/d/1FnCOA4eQicK8MCZA4nCwk76bSBnU-5f_/view?usp=sharing)
+
+</div>
+
+---
+
+## 🧭 One email, start to finish
+
+A fire department writes: *“We cannot approve the permit until the updated ventilation plan is submitted.”* Here is what ReleaseOS does with it:
+
+| | Step | What you see |
+|:-:|---|---|
+| **1** | 📥 **AI reads the documents**<br><sub>Switchgear datasheet moves from **480 → 600 VAC**. Every fact is checked against the page it came from.</sub> | <img src="docs/readme/inbox.jpg" width="420" alt="Project Inbox with verified extracted facts"> |
+| **2** | 🧠 **Project Memory**<br><sub>AI *suggests* the requirement. A project manager *confirms* it. Now it’s an obligation with an owner.</sub> | <img src="docs/readme/memory.jpg" width="420" alt="Action Center with the confirmed requirement"> |
+| **3** | 🛡️ **Project Guardian**<br><sub>The release gate finds **3 blockers**, each with the source, the owner and the next action.</sub> | <img src="docs/readme/guardian3.jpg" width="420" alt="Guardian scan with three blockers"> |
+| **4** | 🕸️ **Evidence Graph**<br><sub>Email → requirement → document → package. Every alert answers <b>why, where, who, next</b>.</sub> | <img src="docs/readme/graph.jpg" width="420" alt="Evidence Graph focused chain"> |
+| **5** | 👷 **Engineers decide**<br><sub>A PE reviews the highlighted source PDF, approves the new plans and resolves the requirement.</sub> | <img src="docs/readme/reviews.jpg" width="420" alt="Engineer reviews approved"> |
+| **6** | 📦 **Submission Studio**<br><sub><b>0 blockers</b> → sign-off → 8 approved docs merged into <b>2 real PDFs</b> with cover, index and hashes.</sub> | <img src="docs/readme/sealed.jpg" width="420" alt="Release R2 sealed"> |
+
+---
+
+## 🧠 How it works in 60 seconds
+
+```mermaid
+flowchart LR
+    A["📥 PDFs · emails · ZIPs"] --> B["🔐 Validate + SHA-256"]
+    B --> C["🤖 GPT via OpenAI<br/>Responses API<br/>(strict JSON schema)"]
+    C --> D["✅ Verify every quote<br/>on its PDF page"]
+    D --> E["🧠 Project Memory<br/>+ dependency graph"]
+    E --> F{"🛡️ Guardian<br/>release gate"}
+    F -- "blockers" --> G["👷 Engineer review"]
+    G --> F
+    F -- "0 blockers" --> H["📦 Sealed release<br/>merged PDFs + manifest"]
+    H --> I["🕰️ Time Machine<br/>📋 Lifecycle · 📱 QR"]
+    style C fill:#1A1636,stroke:#A78BFA,color:#fff
+    style F fill:#2A2412,stroke:#F5B547,color:#fff
+    style H fill:#0F3A33,stroke:#34D399,color:#fff
+```
+
+<details>
+<summary><b>🔍 Why can’t the AI just “approve” things?</b> (click)</summary>
+
+<br>
+
+Because a permit package is a **professional and legal responsibility**. In ReleaseOS:
+
+- The **AI is advisory**: it extracts facts and suggests requirements.
+- Every quote the model returns is **checked against the PDF text layer**; unverified facts are flagged.
+- The **release gate is deterministic**: same inputs, same answer, every time. An AI “second opinion” can explain, but can never override it.
+- Only an **authorized engineer** can approve a revision or sign off a release, and the server refuses anything else (HTTP 409).
+
+</details>
+
+<details>
+<summary><b>⚙️ Tech stack and architecture</b> (click)</summary>
+
+<br>
+
+| Layer | What we used |
+|---|---|
+| **App** | Next.js (App Router) · React · TypeScript · Tailwind |
+| **API** | 28 server routes · HMAC-signed sessions · role- and project-scoped authorization |
+| **AI** | OpenAI Responses API, official SDK · PDF `input_file` + image input · strict JSON-schema structured outputs · model configurable via `OPENAI_MODEL` (our demo run showed `gpt-6-luna`) · labeled rules fallback |
+| **Logic** | `lib/memory` (communications → requirements) · `lib/guardian` (evidence graph, consistency, preflight, Time Machine) · `lib/studio` (package checks, PDF builder) · `lib/lifecycle` (obligations, site changes, QR) |
+| **Engine** | `packages/release-core`: snapshot sealing, SHA-256, ZIP archives, release comparison |
+| **Documents** | `unpdf` / PDF.js (text layer) · `pdf-lib` (combined PDFs) · JSZip |
+| **Data** | One authoritative store · atomic JSON snapshots + content-addressed file bytes, reloaded on boot |
+| **Deploy** | Docker (`node:22`) on Railway with a persistent volume |
+
+</details>
+
+<details>
+<summary><b>🧪 What we actually proved (and what we didn’t)</b> (click)</summary>
+
+<br>
+
+**Demonstrated on a synthetic project (Century Tywood J3 Corp, S-1001):**
+
+| | |
+|---|---|
+| 🛡️ Release blockers | **3 → 0**, each resolved by an evidenced engineer decision |
+| 📦 Output | **8** approved documents → **2** combined PDFs (**5 + 8** pages incl. covers) |
+| 🔐 Integrity | SHA-256 per source file · frozen manifest · R1 kept byte-identical |
+| 🚫 Safety | Server refuses a blocked release (HTTP 409) · prompt-injection test PDF can’t change logic |
+| ✅ Tests | release-core 35/35 · app unit tests · 7 end-to-end HTTP suites |
+
+**Not yet:** real EQORE project data · measured time/cost savings · production SSO and database · live Drive/Gmail/HubSpot sync · any code-compliance certification. All documents, emails and approvals in the demo are **fictional**.
+
+</details>
+
+<details>
+<summary><b>🗺️ What’s next</b> (click)</summary>
+
+<br>
+
+| When | Plan |
+|---|---|
+| **Weeks 1–2** | Validate EQORE checklists, access rules and owners on authorized documents |
+| **Weeks 3–6** | Shadow pilot on one real project; measure prep hours, missed requirements, rework, cost per package |
+| **Weeks 7–12** | Model evaluation, SSO, production database, Drive/Gmail/HubSpot connectors |
+
+</details>
+
+---
+
+## 👥 Authors
+
+<table>
+<tr>
+<td align="center" width="50%">
+<h3>Ashish Joshi</h3>
+<a href="https://github.com/Delimiter-Ashish">@Delimiter-Ashish</a><br>
+<sub>release-core engine · integration · Project Memory · Guardian backend · Submission Studio · Lifecycle · deployment</sub>
+</td>
+<td align="center" width="50%">
+<h3>Kaushik Joshi</h3>
+   
+<a href="https://github.com/Kaushik2AI">@Kaushik2AI</a><br>
+<sub>original Next.js app · AI document intelligence (OpenAI extraction) · Project Assurance UI · Guardian views</sub>
+</td>
+</tr>
+</table>
+
+<div align="center">
+
+**Built at MIT Energy & Climate Hack 2026 for EQORE.**
+*Because what gets approved should always be explainable.*
+
+</div>
+
+---
+
+## 📚 Developer documentation
+
+> Run, verify, demo script, APIs, architecture and honest limitations. The original engineering notes follow.
 
 EQORE challenge, Option 4 (compliance documentation at scale), MIT Energy & Climate Hack 2026.
 
