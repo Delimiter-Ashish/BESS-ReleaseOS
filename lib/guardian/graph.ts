@@ -9,6 +9,7 @@ export const nid = {
   com: (id: string) => `com:${id}`, mem: (id: string) => `mem:${id}`, fam: (rid: string) => `fam:${rid}`, rev: (id: string) => `rev:${id}`,
   fact: (revId: string, key: string) => `fact:${revId}:${key}`, task: (id: string) => `task:${id}`, rv: (id: string) => `rv:${id}`, dec: (id: string) => `dec:${id}`,
   tpl: (id: string) => `tpl:${id}`, rel: (id: string) => `rel:${id}`, finding: (id: string) => `finding:${id}`,
+  chg: (id: string) => `chg:${id}`, obl: (id: string) => `obl:${id}`, imp: (id: string) => `imp:${id}`,
 };
 export const hrefs = (siteId: string) => ({
   rev: (id: string, page?: number) => `/sites/${siteId}/documents/${encodeURIComponent(id)}${page ? `#p${page}` : ""}`,
@@ -74,6 +75,26 @@ export function buildEvidenceGraph(site: Site, releases: Release[], findings: Co
     edge("raised_by", nid.task(t.id), nid.rev(t.sourceRevisionId), t.explanation, [t.id, t.sourceRevisionId], { at: t.createdAt });
     edge("targets", nid.task(t.id), t.dependentRevisionId ? nid.rev(t.dependentRevisionId) : nid.fam(t.dependentRequirementId), `Changed: ${t.changedKeys.join(", ") || "(see explanation)"}`, [t.id], { at: t.createdAt });
     if (t.resolvedByDecisionId) edge("resolved_by", nid.task(t.id), nid.dec(t.resolvedByDecisionId), t.resolutionNote ?? "resolved", [t.id, t.resolvedByDecisionId], { at: t.resolvedAt });
+  }
+
+  // Lifecycle: obligations track document families; confirmed changes → impacts → obligations; resolutions → decisions.
+  const lc = site.lifecycle;
+  if (lc) {
+    for (const ob of lc.obligations) {
+      if (!nodes.has(nid.fam(ob.requirementId))) node({ id: nid.fam(ob.requirementId), type: "document_family", label: REQ_BY_ID[ob.requirementId]?.name ?? ob.requirementId });
+      node({ id: nid.obl(ob.id), type: "obligation", label: `Obligation: ${ob.title}`, href: `/sites/${site.id}/lifecycle#${ob.id}`, at: ob.createdAt, data: { category: ob.category, due: ob.due?.date, source: ob.source.kind } });
+      edge("tracks", nid.obl(ob.id), nid.fam(ob.requirementId), `${ob.source.label} (${ob.source.citation})`, [ob.id], { at: ob.createdAt });
+      if (ob.completion) edge("evidenced_by", nid.obl(ob.id), nid.rev(ob.completion.evidenceRevisionId), `Verified by ${ob.completion.verifiedBy}`, [ob.id, ob.completion.evidenceRevisionId, ob.completion.decisionId], { at: ob.completion.verifiedAt });
+    }
+    for (const c of lc.changes.filter((x) => x.status !== "dismissed")) node({ id: nid.chg(c.id), type: "site_change", label: `Site change (${c.status}): ${c.description}`, href: `/sites/${site.id}/lifecycle`, at: c.decidedAt ?? c.proposedAt, data: { kind: c.kind, from: c.from, to: c.to } });
+    for (const i of lc.impacts) {
+      node({ id: nid.imp(i.id), type: "impact", label: `Re-review (${i.status}): ${REQ_BY_ID[i.requirementId]?.name ?? i.requirementId}`, href: `/sites/${site.id}/lifecycle#impacts`, at: i.raisedAt, data: { status: i.status } });
+      edge("may_affect", nid.chg(i.changeId), nid.imp(i.id), i.why, [i.changeId, i.id], { at: i.raisedAt, evidence: i.evidence[0]?.quote });
+      edge("targets", nid.imp(i.id), nid.obl(i.obligationId), i.documentToUpdate, [i.id, i.obligationId], { at: i.raisedAt });
+      for (const e of i.evidence) edge("compares", nid.imp(i.id), nid.rev(e.revisionId), `Rev ${e.revLabel} p.${e.page} still references the replaced item`, [i.id, e.revisionId], { evidence: e.quote, at: i.raisedAt });
+      if (i.decisionId) edge("resolved_by", nid.imp(i.id), nid.dec(i.decisionId), i.resolutionNote ?? "resolved", [i.id, i.decisionId], { at: i.resolvedAt });
+      if (i.resolutionRevisionId) edge("satisfied_by", nid.imp(i.id), nid.rev(i.resolutionRevisionId), "Updated revision approved", [i.id, i.resolutionRevisionId], { at: i.resolvedAt });
+    }
   }
 
   // Releases (frozen)

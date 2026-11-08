@@ -87,5 +87,13 @@ export function seedHeroPolicy(site: Site, at: string) {
     r("sds", withSupplier, ["ahj"]),
     r("ix_application", internal, ["utility"]),
     r("ix_approval", internal, []),
+    // Lifecycle assurance (synthetic demo policy): operations records are visible to the facility; nothing is public.
+    r("om_manual", [...withAuthority, "facility"], ["ahj", "owner"]),
+    r("eop", [...internal, "facility"], ["owner"]),
+    r("ops_record", [...internal, "facility"], ["owner"]),
+    r("training_drill", [...internal, "facility"], ["owner"]),
+    r("cx_plan", [...withAuthority, "facility"], ["ahj", "owner"]),
+    r("cx_report", [...withAuthority, "facility"], ["ahj", "owner"]),
+    r("emergency_info_sheet", [...internal, "facility"], ["owner"]),
   ];
 }

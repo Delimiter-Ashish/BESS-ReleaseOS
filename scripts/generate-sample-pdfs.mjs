@@ -198,3 +198,68 @@ for (const [file, title, what] of [
     "Obtain the actual document from the equipment supplier / certifier.",
   ]], PLACEHOLDER);
 }
+
+// Lifecycle assurance: synthetic operations-phase documents for the hero site. Fictional content, role-based contacts only.
+const LIFECYCLE = "SYNTHETIC - FICTIONAL OPERATIONS DOCUMENT - DEMONSTRATION ONLY";
+const om = (rev, inverter, history) => [
+  [
+    "# O&M Manual - Century Tywood J3 Corp BESS (synthetic)",
+    `Revision: ${rev}`,
+    "System: Gotion Edge 760 battery energy storage system, outdoor pad",
+    `Inverter / PCS: ${inverter}`,
+    "Service contact: EQORE 24/7 operations desk (role-based, synthetic)",
+    "Set points and firmware: see controls schedule (synthetic)",
+    "",
+    "# Revision history",
+    ...history,
+  ],
+  [
+    "# Section 4 - Startup, shutdown and isolation (synthetic)",
+    `4.2 Inverter isolation: stop each ${inverter.replace(/^2 x /, "")} unit from the PCS controller,`,
+    "then open the AC disconnect next to the main distribution panel.",
+    "4.3 Restart only after BMS alarms are cleared by EQORE operations.",
+    "# Section 6 - Maintenance schedule",
+    "Maintenance intervals are project-specific and set by EQORE and the owner.",
+    "This synthetic manual does not state code-mandated frequencies.",
+  ],
+];
+await makePdf("SYNTHETIC_OM_Manual_RevA.pdf", "O&M Manual Rev A", om("A", "2 x Dynapower MPS125", ["A 2026-10-01 Initial issue for commissioning"]), LIFECYCLE);
+await makePdf("SYNTHETIC_OM_Manual_RevB.pdf", "O&M Manual Rev B", om("B", "2 x Northbridge NPI-125", ["A 2026-10-01 Initial issue for commissioning", "B 2026-11-07 Inverter replacement 2 x Dynapower MPS125 to 2 x Northbridge NPI-125"]), LIFECYCLE);
+const eop = (rev, inverter, history) => [
+  [
+    "# Emergency Operations Plan - Century Tywood J3 Corp (synthetic)",
+    `Revision: ${rev}`,
+    "1. Safe shutdown and isolation",
+    `Use the PCS emergency stop on each inverter (${inverter}).`,
+    "Open the AC disconnect next to the main distribution panel.",
+    "2. BMS alarm response: call the EQORE 24/7 operations desk (role-based, synthetic).",
+    "3. Fire, explosion or release: evacuate, keep enclosures closed, stay upwind.",
+    "4. Damaged equipment: do not re-energize; EQORE assesses before restart.",
+    "",
+    "# Revision history",
+    ...history,
+  ],
+  [
+    "# 5. Drills and training (synthetic)",
+    "Drill dates are scheduled by the facility and EQORE (project-specific).",
+    "This synthetic plan does not state code-mandated drill frequencies.",
+  ],
+];
+await makePdf("SYNTHETIC_EOP_RevA.pdf", "Emergency Operations Plan Rev A", eop("A", "2 x Dynapower MPS125", ["A 2026-10-01 Initial issue"]), LIFECYCLE);
+await makePdf("SYNTHETIC_EOP_RevB.pdf", "Emergency Operations Plan Rev B", eop("B", "2 x Northbridge NPI-125", ["A 2026-10-01 Initial issue", "B 2026-11-07 Inverter replacement 2 x Dynapower MPS125 to 2 x Northbridge NPI-125"]), LIFECYCLE);
+await makePdf("SYNTHETIC_Maintenance_Inspection_Record_2026-11.pdf", "Scheduled Maintenance Inspection Record", [[
+  "# Scheduled maintenance inspection record (synthetic)",
+  "Site: Century Tywood J3 Corp, 79 Lowland St, Holliston MA",
+  "Performed on: 2026-11-06",
+  "Performed by: EQORE field technician (fictional)",
+  "Items: enclosure visual check, BMS alarm log review, HVAC filter, label condition",
+  "Result: no deficiencies recorded (synthetic)",
+]], "SYNTHETIC RECORD - FICTIONAL - NOT EVIDENCE THAT MAINTENANCE OCCURRED");
+await makePdf("SYNTHETIC_Emergency_Info_Sheet.pdf", "First-Responder Emergency Information", [[
+  "# First-responder emergency information (synthetic)",
+  "Site: Century Tywood J3 Corp, 79 Lowland St, Holliston MA",
+  "BESS: lithium iron phosphate (LFP), outdoor pad, west side of building",
+  "Disconnect: AC disconnect next to the main distribution panel",
+  "Do not open battery enclosures. Stay upwind; treat smoke as toxic and flammable.",
+  "24/7 response line: 555-0100 (fictional)",
+]], "SYNTHETIC - FICTIONAL - DEMONSTRATION ONLY");

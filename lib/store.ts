@@ -17,6 +17,8 @@ import { studioCheck } from "./studio/check";
 import type { CombinedPdfOutput, StudioSelection } from "./studio/types";
 import { applicableItems } from "./memory/readiness";
 import { buildManifest, latestApproved, latestRelease, packageReadiness, revisionsOf } from "./release";
+import { clockNow } from "./lifecycle/clock";
+import { ensureLifecycle } from "./lifecycle/register";
 import { clearState, loadState, saveBlob, saveState, type StoredFile } from "./persistence";
 import { buildSeed, placeholderContent, sha256, type SeedData } from "./seed";
 import type { DecisionRecord, EngineeringTask, FactChange, PinnedItem, Release, Revision, ReviewTask, Site } from "./types";
@@ -52,7 +54,7 @@ function db(): DB {
   if (!g.__eqore) g.__eqore = init();
   return g.__eqore;
 }
-const nowIso = () => new Date().toISOString();
+const nowIso = () => clockNow().toISOString(); // system clock unless RELEASEOS_CLOCK is set (lib/lifecycle/clock.ts)
 /** Durably record the current state (called at the end of every successful mutation). */
 export function persist() {
   saveState(db());
@@ -298,8 +300,8 @@ function createRelease(site: Site, templateId: string, s: Pick<Session, "userId"
   const tasks = (site.engTasks ?? []).filter((et) => et.status === "resolved" && reqs.has(et.dependentRequirementId));
   const draft: Release = { id, siteId: site.id, templateId, number, items, openFlags: [], builtBy: s.name, builtById: s.userId, builtAt, note, manifestSha256: "" };
   const manifest = buildManifest(site, draft, prev); // computed once, frozen into the snapshot
-  const { documents: _docs, engTasks: _t, decisions: _d, communications: _c, memory: _m, accessPolicy: _p, ...siteRecord } = site;
-  void _docs; void _t; void _d; void _c; void _m; void _p;
+  const { documents: _docs, engTasks: _t, decisions: _d, communications: _c, memory: _m, accessPolicy: _p, lifecycle: _l, ...siteRecord } = site;
+  void _docs; void _t; void _d; void _c; void _m; void _p; void _l;
   // Project-memory items that applied to this package are frozen with their sources (omitted when none, e.g. seeded R1).
   const projectMemory = applicableItems(site, templateId).map((m) => ({ id: m.id, kind: m.kind, title: m.title, status: m.status, requirementId: m.requirementId, sources: m.sources, confirmedBy: m.confirmedBy, confirmedAt: m.confirmedAt, resolvedBy: m.resolvedBy, resolvedAt: m.resolvedAt, resolutionNote: m.resolutionNote, resolvedRevisionId: m.resolvedRevisionId, resolvedRevisionSha256: m.resolvedRevisionSha256 }));
   const snapshot = sealRelease({
@@ -423,6 +425,7 @@ const SEED_ENGINEER = { userId: "seed-engineer", name: "EQORE engineer (seeded h
 function finalizeSeed(d: DB) {
   seedHeroPolicy(d.sites[0], d.sites[0].documents.map((x) => x.uploadedAt).sort()[0] ?? nowIso());
   for (const site of d.sites) {
+    ensureLifecycle(site, nowIso()); // lifecycle obligation register (lib/lifecycle/register.ts; no due dates seeded)
     site.decisions ??= [];
     site.engTasks ??= [];
     for (const r of site.documents) {

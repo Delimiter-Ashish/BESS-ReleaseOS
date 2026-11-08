@@ -150,7 +150,7 @@ export interface EngineeringTask {
 export interface DecisionRecord {
   id: string;
   siteId: string;
-  kind: "revision_review" | "dependency_resolution" | "release_signoff";
+  kind: "revision_review" | "dependency_resolution" | "release_signoff" | "lifecycle_review" | "emergency_publication"; // last two: additive (lifecycle)
   revisionId?: string;
   contentSha256?: string;
   taskIds: string[];
@@ -235,6 +235,9 @@ export interface Site {
   // ---- additive (Submission Studio; see lib/studio/access.ts) ----
   /** Document access policy history per document type (latest rule wins). Absent = conservative defaults. */
   accessPolicy?: import("./studio/access").AccessRule[];
+  // ---- additive (Lifecycle assurance; see lib/lifecycle/types.ts) ----
+  /** Obligation register, site changes, impacts, maintenance events, emergency publications. Absent = created on first use. */
+  lifecycle?: import("./lifecycle/types").LifecycleState;
 }
 
 export interface User {

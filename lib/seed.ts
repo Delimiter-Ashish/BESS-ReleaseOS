@@ -4,6 +4,7 @@
 import { createHash } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { clockNow } from "./lifecycle/clock";
 import { REQUIREMENTS, STAGES, stageIndex, type StageId } from "./requirements";
 import type { Fact, Release, Revision, ReviewTask, Site } from "./types";
 
@@ -15,7 +16,7 @@ function rng(seed: number) {
   };
 }
 
-export const TODAY = new Date();
+export const TODAY = clockNow(); // system clock unless RELEASEOS_CLOCK is set
 const day = 86400000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 export const daysAgo = (n: number) => iso(new Date(TODAY.getTime() - n * day));
@@ -227,6 +228,10 @@ export function buildSeed(count = 84): SeedData {
     rev(H, "plan_set", 2, daysAgo(100), { source: "engineer", uploadedBy: "Engineer of record", ...real("SYNTHETIC_Plan_Set_RevB.pdf"), summary: "Rev B: change inverters to 2 × Dynapower MPS125 (per sample plan revision block)", facts: [f("revision.label", "Revision", "B", undefined, "B 01/11/2026 Change inverters to 2 x Dynapower MPS125", 1), f("rating.power_kw", "AC system size", "250", "kW", "AC System Size: 250kW", 1), f("rating.energy_kwh", "DC system size", "760", "kWh", "DC System Size: 760kWh", 1), f("rating.current_a", "Switchgear rating (line diagram)", "400", "A", "400A AC disconnect (ESS-13.0, synthetic)", 2), f("rating.voltage_v", "Switchgear voltage (line diagram)", "480", "VAC", "480 VAC AC disconnect (ESS-13.0, synthetic)", 2)] }),
     rev(H, "ix_application", 1, daysAgo(95), { source: "eqore" }),
     rev(H, "ix_approval", 1, daysAgo(40), { source: "utility", uploadedBy: "Eversource" }),
+    // Lifecycle assurance: operations documents prepared ahead of commissioning (synthetic, fictional content).
+    rev(H, "om_manual", 1, daysAgo(37), { source: "eqore", uploadedBy: "EQORE operations", ...real("SYNTHETIC_OM_Manual_RevA.pdf") }),
+    rev(H, "eop", 1, daysAgo(37), { source: "eqore", uploadedBy: "EQORE operations", ...real("SYNTHETIC_EOP_RevA.pdf") }),
+    rev(H, "emergency_info_sheet", 1, daysAgo(37), { source: "eqore", uploadedBy: "EQORE operations", ...real("SYNTHETIC_Emergency_Info_Sheet.pdf") }),
   ];
 
   const releases: Release[] = [];

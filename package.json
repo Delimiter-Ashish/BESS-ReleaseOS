@@ -19,7 +19,8 @@
     "postinstall": "npm --prefix packages/release-core ci --no-audit --no-fund && npm run core:build",
     "e2e:memory": "node scripts/e2e-memory.mjs",
     "e2e:guardian": "node scripts/e2e-guardian.mjs",
-    "e2e:studio": "node scripts/e2e-studio.mjs"
+    "e2e:studio": "node scripts/e2e-studio.mjs",
+    "e2e:lifecycle": "node scripts/e2e-lifecycle.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

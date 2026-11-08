@@ -25,7 +25,7 @@ Sign in from the top-right menu (demo identities, passcodes shown): **A. Rivera*
 ## Verification
 
 ```bash
-npm test                                   # release-core (35) + app unit/workflow tests (9)
+npm test                                   # release-core (35) + app unit/workflow tests (30)
 npm run typecheck && npm run build
 BASE=http://localhost:3000 npm run e2e     # 25 HTTP checks against a running server (resets the store)
 npm run e2e:memory                         # 17 project-memory checks; starts its own server on :3102 incl. a restart
@@ -33,6 +33,7 @@ E2E_PROVIDER=openai npm run e2e:memory     # same scenario with real OpenAI call
 npm run e2e:guardian                       # Project Guardian demo (16 checks incl. restart + transformer negative test)
 E2E_PROVIDER=openai npm run e2e:guardian   # same, with live OpenAI extraction + advisory AI review
 npm run e2e:studio                         # Submission Studio demo (13 checks: PDFs, hashes, access policy, restart)
+npm run e2e:lifecycle                      # Lifecycle assurance demo (13 checks, frozen clock 2026-11-07, incl. restart)
 node scripts/openai-contract.mjs           # OpenAI provider wiring vs a mock Responses endpoint (no key needed; needs a prior build)
 ```
 
@@ -177,6 +178,47 @@ Demo docs: `SYNTHETIC_Switchgear_Spec_RevB.pdf` (600 VAC) vs the seeded plan set
 verified discrepancy; `SYNTHETIC_Plan_Set_RevC.pdf` resolves it; `SYNTHETIC_Interconnection_Application_RevB.pdf`
 (13,200 V utility / T1 13,200/600 V / 600 V disconnect) is the negative test — explained, not flagged.
 
+## Compliance lifecycle — obligations after submission (`/sites/:id/lifecycle`)
+
+Ongoing documentation tracking from commissioning through operation, maintenance and decommissioning, built on the
+same documents, approvals, decisions and access policy (no second store; state lives in `Site.lifecycle`).
+
+- **Register** (`lib/lifecycle/register.ts`): one obligation per document type from the EQORE README NFPA 855 table
+  and approval list (commissioning plan/report, O&M manual, operations/maintenance/training records, EOP,
+  decommissioning plan/notice/report, permits, inspection sign-offs, IX approval, PTO, signage, SDS). Each carries its
+  source/citation, stage, responsible party, engineer reviewer, change triggers, access rule and history.
+  **No due dates are built in** — the README is a starting model, not a legal engine.
+- **Schedules** are configured per project (`add_obligation`, `set_due`), labeled *project-specific / synthetic*, with
+  who/why recorded. Status is derived from stored dates and review state at a **site-local date**
+  (`America/New_York` for MA): `not_applicable`, `needs_review`, `awaiting_review`, `overdue`, `due_soon` (configurable
+  warning window), `upcoming`, `open`, `completed`. `?asOf=` previews any date (read-only); `RELEASEOS_CLOCK` pins the
+  clock for tests/demos.
+- **Maintenance records**: an operator (facility or EQORE) records the event → status *awaiting review*; an uploaded
+  file is **not** proof. Only after an engineer approves the evidence revision and verifies it does the cycle complete.
+  Duplicates (same obligation/type/date) are rejected.
+- **Change → impacted obligation → human review → updated document**: a recorded site change is only a proposal
+  (also when derived from a project-memory suggestion). When an EQORE user confirms it, every obligation is assessed
+  against the requirement model's change triggers; affected obligations with an approved document get an impact with
+  *what changed, why, source, responsible party, reviewer, document to update* and **evidence quotes** where the current
+  revision still names the replaced equipment (revision-history rows ignored). Resolution needs a licensed engineer and
+  either a newer approved revision or a justified no-change decision (recorded as a `DecisionRecord`). Impacts appear in
+  the Guardian evidence graph (`chg:` → `imp:` → `obl:`).
+- **Access**: EQORE sees everything; facility/AHJ/supplier see only obligations whose document type the Studio access
+  policy lets them view, without notes, change records or evidence quotes. Files stay gated by `/api/files`.
+- **First-responder QR page** `/e/:id`: shows **only** documents an engineer explicitly published
+  (`publish_emergency`, allowed types: emergency info sheet, EOP, signage, SDS). Served only while still the current
+  approved revision with a matching sha256. Nothing is published by default.
+
+| Method & path | Who | Purpose |
+|---|---|---|
+| `GET /api/sites/:id/lifecycle[?asOf=]` | signed in (filtered by policy) | `LifecycleView` |
+| `POST /api/sites/:id/lifecycle` | per action (below) | `LifecycleAction` (typed union in `lib/lifecycle/types.ts`) |
+| `GET /api/public/sites/:id/emergency[/:pubId]` | public | explicitly published emergency documents only |
+
+Actions: `set_stage`, `settings`, `add_obligation`, `set_due` (EQORE) · `propose_change`, `record_event` (EQORE,
+facility) · `confirm_change`, `dismiss_change`, `withdraw_emergency` (EQORE) · `resolve_impact`, `verify_completion`,
+`publish_emergency` (engineer). Every mutating action needs a note.
+
 ## Persistence
 
 Every mutation writes `RELEASEOS_DATA_DIR/state.json` atomically (default `./.data`, git-ignored); uploaded bytes
@@ -227,3 +269,7 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 - Combined PDFs copy pages: digital signatures will not validate and form fields may not survive (warned; originals kept).
 - Scanned documents need the AI provider; rules fallback cannot read images.
 - AI output is decision support only; nothing here certifies NFPA 855, UL, NEC or AHJ compliance.
+- Lifecycle: change → obligation mapping uses the requirement model's trigger table (an assumption to confirm with
+  EQORE); evidence is a text match on the replaced identifier, so documents without a text layer get trigger-only
+  impacts. Schedules are one due date per cycle (no recurrence rules). The legacy QR page `/p/:id` (portfolio UI) still
+  shows hard-coded shutdown steps and site contacts; the explicitly-published page is `/e/:id`.
