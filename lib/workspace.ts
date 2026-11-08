@@ -355,9 +355,10 @@ export function readiness(siteId: string, templateId: string): ReadinessView | u
     const openReview = i.pending ? getReviews(site.id).find((rv) => rv.revisionId === i.pending!.id && rv.status === "open") : undefined;
     const href = i.state === "missing" ? `/inbox?project=${site.id}&expect=${i.requirementId}`
       : (i.state === "in_review" || i.state === "pending_change") && openReview ? reviewHref(openReview.id)
-      : i.state === "needs_eng_review" ? reviewHref(i.tasks[0].id)
+      // needs_eng_review comes from an engineering task OR from a confirmed requirement awaiting explicit resolution (no task).
+      : i.state === "needs_eng_review" ? (i.tasks[0] ? reviewHref(i.tasks[0].id) : i.requiredBy[0] ? `/memory?project=${site.id}&type=ahj_requirement&item=${encodeURIComponent(i.requiredBy[0])}` : `/projects/${site.id}?doc=${i.requirementId}`)
       : `/projects/${site.id}?doc=${i.requirementId}`;
-    const action = i.state === "missing" ? "Import document" : i.state === "needs_eng_review" ? "Open dependency review" : i.state === "ready" ? "View document" : "Open review";
+    const action = i.state === "missing" ? "Import document" : i.state === "needs_eng_review" ? (i.tasks.length ? "Open dependency review" : "Resolve requirement") : i.state === "ready" ? "View document" : "Open review";
     const shown = i.pending ? site.documents.find((d) => d.id === i.pending!.id) : i.approved;
     return {
       requirementId: i.requirementId, name: i.name, state: i.state,

@@ -46,3 +46,35 @@ test("readiness only counts the package's own requirements", () => {
   assert.equal(ix.status, "blocked");
   assert.ok(ix.items.find((i) => i.requirementId === "utility_bill")!.href.startsWith("/inbox?project=S-1001&expect=utility_bill"));
 });
+
+// Regression (demo crash, digest 1164880037): after the requested document is APPROVED but the confirmed requirement is
+// not yet resolved, the gate reports needs_eng_review WITHOUT an engineering task. The view must not assume tasks[0].
+test("approved requested document with an unresolved confirmed requirement renders (no tasks[0] crash)", async () => {
+  store.resetStore();
+  const { readFileSync } = await import("node:fs");
+  const { readTextLayer } = await import("../lib/pdf");
+  const { rulesExtract } = await import("../lib/extract");
+  const { parseEmailHeaders } = await import("../lib/memory/email");
+  const { confirmItem, recordCommunication, validateImport } = await import("../lib/memory/register");
+  const { rulesAnalyzeCommunication } = await import("../lib/memory/rules");
+  const { groundCommunication } = await import("../lib/memory/schema");
+  const ENG: Session = { userId: "rpatel", name: "R. Patel, PE", role: "eqore", engineer: true, roles: ["eqore", "engineer"] };
+  const body = readFileSync("sample-docs/SYNTHETIC_AHJ_Email_Ventilation.txt", "utf8");
+  const h = parseEmailHeaders(body);
+  const input = validateImport({ body, channel: "ahj_comment", sender: h.from, sentAt: h.date, subject: h.subject });
+  const { items } = recordCommunication("S-1001", input, { ...groundCommunication(rulesAnalyzeCommunication(body, { channel: input.channel, sender: input.sender }), body), engine: "rules", fallback: false }, PM);
+  const req = items.find((i) => i.requirementId === "ventilation_plan")!;
+  confirmItem("S-1001", req.id, PM, { note: "Applies to the permit resubmission", blocking: true, templateIds: ["ahj_permit"] });
+  const bytes = readFileSync("sample-docs/SYNTHETIC_Ventilation_Plan_RevA.pdf");
+  const layer = await readTextLayer("application/pdf", bytes);
+  const { fileId, sha256 } = store.putFile("vent.pdf", "application/pdf", bytes);
+  const ex = store.saveExtraction({ siteId: "S-1001", fileId, sha256, fileName: "vent.pdf", mediaType: "application/pdf", textLayer: layer.joined, pageCount: layer.pageCount, result: { ...rulesExtract("vent.pdf", layer), provider: "rules", fallback: false }, impacts: {}, createdBy: PM.userId });
+  const sub = store.submitRevision("S-1001", { extractionId: ex.id, requirementId: "ventilation_plan" }, PM);
+  store.decideReview(sub.review.id, "approve", ENG, "Ventilation plan reviewed (synthetic)");
+  const r = readiness("S-1001", "ahj_permit")!;
+  const vent = r.items.find((i) => i.requirementId === "ventilation_plan")!;
+  assert.equal(vent.state, "needs_eng_review");
+  assert.equal(vent.action, "Resolve requirement");
+  assert.match(vent.href, new RegExp(`/memory\\?project=S-1001&type=ahj_requirement&item=${encodeURIComponent(req.id)}`));
+  assert.doesNotThrow(() => reviewQueue(ENG));
+});
