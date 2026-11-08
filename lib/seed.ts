@@ -6,10 +6,11 @@ import { readFileSync } from "fs";
 import { basename, join } from "path";
 import { loadDocuments, loadFacts, loadProjects, partiesFor } from "./demo-data";
 import { compareFacts, materialChanges } from "./intelligence";
+import { clockNow } from "./lifecycle/clock";
 import { REQUIREMENTS, stageIndex } from "./requirements";
 import type { Fact, Release, Revision, ReviewTask, Site } from "./types";
 
-export const TODAY = new Date();
+export const TODAY = clockNow(); // system clock unless RELEASEOS_CLOCK is set
 const day = 86400000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 export const daysAgo = (n: number) => iso(new Date(TODAY.getTime() - n * day));
@@ -118,14 +119,22 @@ export function buildSeed(): SeedData {
   const swHash = sha256(swBytes);
   const swFileId = `f_${swHash.slice(0, 24)}`;
   files.set(swFileId, { name: HERO_SWITCHGEAR_A, mediaType: "application/pdf", bytes: swBytes, sha256: swHash });
+  // Real synthetic PDF bytes for the hero's other AHJ documents (Submission Studio merges actual PDFs).
+  const real = (name: string): Partial<Revision> => {
+    const bytes = sampleBytes(name);
+    const hash = sha256(bytes);
+    const fileId = `f_${hash.slice(0, 24)}`;
+    files.set(fileId, { name, mediaType: "application/pdf", bytes, sha256: hash });
+    return { fileName: name, fileId, sha256: hash, mediaType: "application/pdf", pageCount: (bytes.toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? []).length };
+  };
   hero.documents = [
     rev(H, "contract", 1, daysAgo(160), { source: "eqore" }),
     rev(H, "proposal", 2, daysAgo(170), { source: "eqore" }),
     // utility_bill intentionally absent: the interconnection package shows a MISSING document blocker.
     rev(H, "site_photos", 1, daysAgo(148), { source: "eqore", fileName: "Revenue Meter + Transformer + MDP + Pole 54.pdf", facts: [f("meter.serial", "Revenue meter serial", "08105663", undefined, "Serial Number: 08105663", 1), f("pole.number", "Utility pole", "54", undefined, "Power Pole Number: 54", 1)] }),
     rev(H, "property_record", 1, daysAgo(148), { source: "eqore", fileName: "79 Lowland Street Map.pdf" }),
-    rev(H, "battery_datasheet", 1, daysAgo(120), { source: "supplier", uploadedBy: "Battery supplier", facts: [f("equipment.model", "Model", "Gotion Edge 760", undefined, "BESS: Gotion Edge 760", 1), f("rating.energy_kwh", "Energy", "760", "kWh", "DC System Size: 760kWh", 1), f("chemistry", "Chemistry", "LFP", undefined, "Lithium iron phosphate", 1)] }),
-    rev(H, "inverter_datasheet", 1, daysAgo(118), { source: "supplier", uploadedBy: "Inverter supplier", facts: [f("equipment.model", "Model", "Dynapower MPS125", undefined, "Inverter Model: 2 x Dynapower MPS125", 1), f("rating.power_kw", "AC power (each)", "125", "kW", "MPS125 125 kW", 1), f("rating.voltage_v", "AC voltage", "480", "V", "480 VAC 3-phase", 1)] }),
+    rev(H, "battery_datasheet", 1, daysAgo(120), { source: "supplier", uploadedBy: "Battery supplier", ...real("SYNTHETIC_Battery_Equipment_Summary.pdf"), facts: [f("equipment.model", "Model", "Gotion Edge 760", undefined, "BESS: Gotion Edge 760", 1), f("rating.energy_kwh", "Energy", "760", "kWh", "DC System Size: 760kWh", 1), f("chemistry", "Chemistry", "LFP", undefined, "Lithium iron phosphate", 1)] }),
+    rev(H, "inverter_datasheet", 1, daysAgo(118), { source: "supplier", uploadedBy: "Inverter supplier", ...real("SYNTHETIC_Inverter_Equipment_Summary.pdf"), facts: [f("equipment.model", "Model", "Dynapower MPS125", undefined, "Inverter Model: 2 x Dynapower MPS125", 1), f("rating.power_kw", "AC power (each)", "125", "kW", "MPS125 125 kW", 1), f("rating.voltage_v", "AC voltage", "480", "V", "480 VAC 3-phase", 1)] }),
     rev(H, "switchgear_datasheet", 1, daysAgo(115), { source: "supplier", uploadedBy: "Northbridge supplier portal", fileName: HERO_SWITCHGEAR_A, fileId: swFileId, sha256: swHash, mediaType: "application/pdf", pageCount: 2, facts: [
       v("equipment.manufacturer", "Manufacturer", "Northbridge Power Systems", undefined, "Manufacturer: Northbridge Power Systems", 2),
       v("equipment.model", "Model", "NSG-4000", undefined, "Model: NSG-4000", 2),
@@ -140,13 +149,17 @@ export function buildSeed(): SeedData {
       v("doc.date", "Document date", "2026-07-15", undefined, "Date: 2026-07-15", 1),
       v("doc.number", "Document number", "NPS-SG-4000-SPEC", undefined, "Document No.: NPS-SG-4000-SPEC", 1),
     ] }),
-    rev(H, "ul9540_listing", 1, daysAgo(112), { source: "supplier" }),
-    rev(H, "ul9540a_report", 1, daysAgo(112), { source: "supplier" }),
-    rev(H, "sds", 1, daysAgo(112), { source: "supplier" }),
+    rev(H, "ul9540_listing", 1, daysAgo(112), { source: "supplier", ...real("SYNTHETIC_UL9540_Listing_Placeholder.pdf") }),
+    rev(H, "ul9540a_report", 1, daysAgo(112), { source: "supplier", ...real("SYNTHETIC_UL9540A_Report_Placeholder.pdf") }),
+    rev(H, "sds", 1, daysAgo(112), { source: "supplier", ...real("SYNTHETIC_SDS_Placeholder.pdf") }),
     rev(H, "plan_set", 1, daysAgo(140), { source: "engineer", status: "approved", fileName: "Full Engineered Plan Set_RevA.pdf" }),
-    rev(H, "plan_set", 2, daysAgo(100), { source: "engineer", uploadedBy: "Engineer of record", fileName: "Full Engineered Plan Set_RevB.pdf", summary: "Rev B: change inverters to 2 × Dynapower MPS125 (per sample plan revision block)", facts: [f("revision.label", "Revision", "B", undefined, "B 01/11/2026 Change inverters to 2 x Dynapower MPS125", 1), f("rating.power_kw", "AC system size", "250", "kW", "AC System Size: 250kW", 1), f("rating.energy_kwh", "DC system size", "760", "kWh", "DC System Size: 760kWh", 1), f("rating.current_a", "Switchgear rating (line diagram)", "400", "A", "400A AC disconnect (ESS-13.0, synthetic)", 13), f("rating.voltage_v", "Switchgear voltage (line diagram)", "480", "VAC", "480 VAC AC disconnect (ESS-13.0, synthetic)", 13)] }),
+    rev(H, "plan_set", 2, daysAgo(100), { source: "engineer", uploadedBy: "Engineer of record", ...real("SYNTHETIC_Plan_Set_RevB.pdf"), summary: "Rev B: change inverters to 2 × Dynapower MPS125 (per sample plan revision block)", facts: [f("revision.label", "Revision", "B", undefined, "B 01/11/2026 Change inverters to 2 x Dynapower MPS125", 1), f("rating.power_kw", "AC system size", "250", "kW", "AC System Size: 250kW", 1), f("rating.energy_kwh", "DC system size", "760", "kWh", "DC System Size: 760kWh", 1), f("rating.current_a", "Switchgear rating (line diagram)", "400", "A", "400A AC disconnect (ESS-13.0, synthetic)", 2), f("rating.voltage_v", "Switchgear voltage (line diagram)", "480", "VAC", "480 VAC AC disconnect (ESS-13.0, synthetic)", 2)] }),
     rev(H, "ix_application", 1, daysAgo(95), { source: "eqore" }),
     rev(H, "ix_approval", 1, daysAgo(40), { source: "utility", uploadedBy: "Eversource" }),
+    // Lifecycle assurance: operations documents prepared ahead of commissioning (synthetic, fictional content).
+    rev(H, "om_manual", 1, daysAgo(37), { source: "eqore", uploadedBy: "EQORE operations", ...real("SYNTHETIC_OM_Manual_RevA.pdf") }),
+    rev(H, "eop", 1, daysAgo(37), { source: "eqore", uploadedBy: "EQORE operations", ...real("SYNTHETIC_EOP_RevA.pdf") }),
+    rev(H, "emergency_info_sheet", 1, daysAgo(37), { source: "eqore", uploadedBy: "EQORE operations", ...real("SYNTHETIC_Emergency_Info_Sheet.pdf") }),
   ];
 
   const releases: Release[] = [];

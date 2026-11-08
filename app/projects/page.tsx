@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { Page, PageHeader, ReadinessPill, SyntheticNote } from "@/components/kit";
+import { Page, PageHeader, ReadinessPill, Restricted, SyntheticNote } from "@/components/kit";
+import { getSession } from "@/lib/auth";
+import { getSites } from "@/lib/store";
+import { registerFor } from "@/lib/view-access";
 import DocumentRegister from "@/components/projects/DocumentRegister";
 import { pkgLabel } from "@/lib/labels";
 import { STAGES } from "@/lib/requirements";
@@ -8,6 +11,8 @@ import { documentRegister, projectSummaries } from "@/lib/workspace";
 export const dynamic = "force-dynamic";
 
 export default function Projects({ searchParams }: { searchParams: { view?: string; status?: string } }) {
+  const s = getSession();
+  if (s.role === "public") return <Restricted what="The project portfolio" role={s.role} />;
   const projects = projectSummaries();
   const register = searchParams.view === "register";
   return (
@@ -15,7 +20,7 @@ export default function Projects({ searchParams }: { searchParams: { view?: stri
       <PageHeader eyebrow="Projects" title={register ? "Document register" : "Project portfolio"}
         subtitle={register ? "Every requirement for every project, with its latest revision, status, provenance and responsible party." : "Each project's lifecycle stage, document position and current submissions."}
         actions={<div className="flex overflow-hidden rounded-lg border border-slate-300 text-sm"><Link href="/projects" className={`px-3 py-1.5 ${!register ? "bg-slate-900 text-white" : "bg-white"}`}>Projects</Link><Link href="/projects?view=register" className={`px-3 py-1.5 ${register ? "bg-slate-900 text-white" : "bg-white"}`}>Document register</Link></div>} />
-      {register ? <DocumentRegister rows={documentRegister()} showProject initialStatus={searchParams.status} /> : (
+      {register ? <DocumentRegister rows={getSites().flatMap((site) => registerFor(s, site, documentRegister(site.id)))} showProject initialStatus={searchParams.status} /> : (
         <div className="space-y-3">
           {projects.map((p) => (
             <Link key={p.id} href={`/projects/${p.id}`} className="card block p-4 transition hover:border-slate-300 hover:shadow">

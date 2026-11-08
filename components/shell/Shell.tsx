@@ -28,6 +28,7 @@ const I = {
   compare: "M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M12 2v20",
   graph: "M5 6a2 2 0 1 0 0 .1M19 6a2 2 0 1 0 0 .1M12 18a2 2 0 1 0 0 .1M6.5 7.5 11 16.5M17.5 7.5 13 16.5M7 6h10",
   signoff: "M12 15l-3 6 3-1.5L15 21l-3-6zM12 3a6 6 0 1 0 0 12 6 6 0 0 0 0-12z",
+  lifecycle: "M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z",
 };
 
 /** Navigation per role. Authorization is enforced by the server on every API call — this only shapes the experience. */
@@ -42,6 +43,7 @@ function navFor(s: ShellProps["session"]): { title?: string; items: NavItem[] }[
         { href: "/guardian?tab=graph", label: "Engineering Evidence", sub: "Guardian evidence graph", icon: I.graph },
         { href: "/projects", label: "Relevant Projects", icon: I.projects },
         { href: "/submissions?view=signoff", label: "Release Signoff", icon: I.signoff, badge: "blocked", tone: "red" },
+        { href: "/lifecycle", label: "Lifecycle Reviews", sub: "Site changes · maintenance evidence", icon: I.lifecycle },
       ] },
       { title: "Records", items: [{ href: "/activity", label: "Activity History", icon: I.activity }, { href: "/qr", label: "Site QR Access", icon: I.qr }] },
     ];
@@ -52,11 +54,13 @@ function navFor(s: ShellProps["session"]): { title?: string; items: NavItem[] }[
         { href: "/guardian", label: "Project Guardian", sub: "Scan · evidence graph · time machine", icon: I.guardian, badge: "actions", tone: "amber" },
         { href: "/memory", label: "Action Center", sub: "Findings & Project Memory", icon: I.actions, badge: "confirm", tone: "cyan" },
         { href: "/submissions", label: "Submission Studio", icon: I.studio, badge: "blocked", tone: "red" },
+        { href: "/lifecycle", label: "Lifecycle", sub: "Obligations · deadlines · site changes", icon: I.lifecycle },
       ] },
       { title: "Records", items: [{ href: "/activity", label: "Activity History", icon: I.activity }, { href: "/qr", label: "Site QR Access", icon: I.qr }] },
     ];
   if (s.role === "supplier") return [{ items: [{ href: "/", label: "Today", icon: I.today }, { href: "/inbox", label: "Upload documents", icon: I.inbox }, { href: "/projects", label: "Projects", icon: I.projects }] }];
-  if (s.role === "ahj" || s.role === "facility") return [{ items: [{ href: "/", label: "Today", icon: I.today }, { href: "/projects", label: "Projects", icon: I.projects }, { href: "/qr", label: "Site QR Access", icon: I.qr }] }];
+  if (s.role === "facility") return [{ items: [{ href: "/", label: "Today", icon: I.today }, { href: "/projects", label: "Projects", icon: I.projects }, { href: "/lifecycle", label: "Obligations & records", icon: I.lifecycle }, { href: "/qr", label: "Site QR Access", icon: I.qr }] }];
+  if (s.role === "ahj") return [{ items: [{ href: "/", label: "Today", icon: I.today }, { href: "/projects", label: "Projects", icon: I.projects }, { href: "/qr", label: "Site QR Access", icon: I.qr }] }];
   return [{ items: [{ href: "/", label: "Today", icon: I.today }, { href: "/qr", label: "Site QR Access", icon: I.qr }] }];
 }
 

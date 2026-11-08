@@ -35,7 +35,12 @@ export interface Observation {
   contextReason: string; // how equipment/side were determined
 }
 
-export type FindingClass = "verified_discrepancy" | "potential_inconsistency" | "explained_difference" | "consistent" | "insufficient_evidence";
+/**
+ * verified_discrepancy  — same quantity, SAME equipment identifier on both sides, same (or both unstated) interface
+ * needs_clarification   — values differ for what appears to be the same equipment, but identity or interface is
+ *                         not established by both documents (e.g. "AC disconnect" vs "NSG-4000"); engineer to clarify
+ */
+export type FindingClass = "verified_discrepancy" | "needs_clarification" | "potential_inconsistency" | "explained_difference" | "consistent" | "insufficient_evidence";
 
 export interface AiReview {
   model: string;
@@ -67,11 +72,11 @@ export interface ConsistencyFinding {
 }
 
 // ---- Evidence graph ----
-export type NodeType = "communication" | "memory_item" | "document_family" | "revision" | "observation" | "fact" | "engineering_task" | "review_task" | "decision" | "template" | "release" | "finding";
+export type NodeType = "communication" | "memory_item" | "document_family" | "revision" | "observation" | "fact" | "engineering_task" | "review_task" | "decision" | "template" | "release" | "finding" | "site_change" | "obligation" | "impact";
 export interface GraphNode { id: string; type: NodeType; label: string; href?: string; at?: string; data?: Record<string, unknown> }
 export type EdgeType =
   | "mentions" | "proposes" | "requires_document" | "applies_to" | "revision_of" | "states" | "supersedes"
-  | "raised_by" | "targets" | "decided_by" | "resolved_by" | "pins" | "satisfied_by" | "compares" | "gated_by" | "reviews" | "requires";
+  | "raised_by" | "targets" | "decided_by" | "resolved_by" | "pins" | "satisfied_by" | "compares" | "gated_by" | "reviews" | "requires" | "may_affect" | "tracks" | "evidenced_by";
 export interface GraphEdge {
   id: string;
   type: EdgeType;

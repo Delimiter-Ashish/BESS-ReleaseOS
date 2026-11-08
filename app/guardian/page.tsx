@@ -1,6 +1,6 @@
 import GuardianWorkspace from "@/components/guardian/GuardianWorkspace";
 import type { ReleaseOption } from "@/components/guardian/TimeMachine";
-import { Page, PageHeader, SyntheticNote } from "@/components/kit";
+import { Page, PageHeader, SyntheticNote, Restricted } from "@/components/kit";
 import { can, getSession } from "@/lib/auth";
 import { pkgLabel } from "@/lib/labels";
 import { PACKAGE_TEMPLATES, REQ_BY_ID } from "@/lib/requirements";
@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default function GuardianPage({ searchParams }: { searchParams: { project?: string; template?: string; tab?: string; run?: string; focus?: string; release?: string } }) {
   const s = getSession();
+  if (s.role !== "eqore") return <Restricted what="Project Guardian" role={s.role} />;
   const sites = getSites();
   const site = sites.find((x) => x.id === searchParams.project) ?? sites.find((x) => x.id === "S-1001")!;
   const current = relevantTemplates(site);

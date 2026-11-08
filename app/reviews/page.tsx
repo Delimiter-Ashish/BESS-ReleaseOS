@@ -1,4 +1,4 @@
-import { Page, PageHeader } from "@/components/kit";
+import { Page, PageHeader, Restricted } from "@/components/kit";
 import ReviewInbox from "@/components/reviews/ReviewInbox";
 import { can, getSession } from "@/lib/auth";
 import { getSites } from "@/lib/store";
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default function Reviews({ searchParams }: { searchParams: { item?: string; project?: string; status?: string; kind?: string } }) {
   const s = getSession();
+  if (s.role !== "eqore") return <Restricted what="Engineering review" role={s.role} />;
   const items = reviewQueue(s);
   const status = searchParams.status === "all" || searchParams.status === "closed" ? searchParams.status : undefined;
   return (

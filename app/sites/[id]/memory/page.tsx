@@ -1,3 +1,4 @@
+import { Restricted } from "@/components/kit";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
@@ -19,6 +20,7 @@ export default function MemoryPage({ params }: { params: { id: string } }) {
   const site = getSite(params.id);
   if (!site) notFound();
   const session = getSession();
+  if (session.role !== "eqore") return <Restricted what="Project memory" role={session.role} />;
   const isEqore = can(session, "memory");
   const reports = PACKAGE_TEMPLATES.map((t) => preSubmissionReport(site, t.id, { redactEvidence: !isEqore })!);
   const items = site.memory ?? [];

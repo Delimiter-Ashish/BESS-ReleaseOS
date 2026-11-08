@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Page, PageHeader, SyntheticNote } from "@/components/kit";
+import { Page, PageHeader, SyntheticNote, Restricted } from "@/components/kit";
 import { can, getSession } from "@/lib/auth";
 import { pkgLabel } from "@/lib/labels";
 import { REQ_BY_ID } from "@/lib/requirements";
@@ -20,6 +20,7 @@ const KIND: Record<Kind, { label: string; dot: string }> = {
 /** Every row is a stored record with the identity and timestamp the server recorded. Nothing is generated here. */
 export default function Activity({ searchParams }: { searchParams: { project?: string; kind?: string; seeded?: string } }) {
   const s = getSession();
+  if (s.role !== "eqore") return <Restricted what="Activity history" role={s.role} />;
   const internal = can(s, "memory");
   const showSeeded = searchParams.seeded === "1";
   const sites = getSites().filter((x) => !searchParams.project || x.id === searchParams.project);

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { headers } from "next/headers";
 import { EvidenceProvider } from "@/components/evidence/EvidenceProvider";
 import Shell from "@/components/shell/Shell";
 import { DEMO_USERS, getSession } from "@/lib/auth";
@@ -18,6 +19,14 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Public first-responder pages: no workspace shell, no session, user directory or portfolio metrics in the payload.
+  if ((headers().get("x-ros-path") ?? "").startsWith("/p/")) {
+    return (
+      <html lang="en">
+        <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
+      </html>
+    );
+  }
   const s = getSession();
   const provider = selectedProvider();
   const keyed = provider === "openai" ? !!process.env.OPENAI_API_KEY : provider === "anthropic" ? !!process.env.ANTHROPIC_API_KEY : true;

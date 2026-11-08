@@ -9,13 +9,14 @@ import type { ConsistencyFinding } from "./types";
 
 const KEY = { voltage: "rating.voltage_v", current: "rating.current_a", interrupting: "rating.interrupting_ka" } as const;
 const snap = (f: ConsistencyFinding) => ({
-  findingId: f.id, quantity: f.quantity, reason: f.reason,
+  findingId: f.id, quantity: f.quantity, reason: f.reason, class: f.class,
   a: { revisionId: f.a.revisionId, display: f.a.display, evidence: f.a.evidence, page: f.a.page },
   b: { revisionId: f.b.revisionId, display: f.b.display, evidence: f.b.evidence, page: f.b.page },
 });
 
 export function syncConsistencyTasks(site: Site, now = new Date().toISOString()) {
-  const verified = findConsistency(site, { view: "approved" }).findings.filter((f) => f.class === "verified_discrepancy");
+  // Conservative: both verified discrepancies and identity-ambiguous differences go to an engineer.
+  const verified = findConsistency(site, { view: "approved" }).findings.filter((f) => f.class === "verified_discrepancy" || f.class === "needs_clarification");
   const tasks = (site.engTasks ??= []);
   const created: EngineeringTask[] = [], attached: string[] = [], superseded: string[] = [];
   for (const f of verified) {
@@ -33,7 +34,7 @@ export function syncConsistencyTasks(site: Site, now = new Date().toISOString())
       sourceRevisionId: f.a.revisionId, sourceRequirementId: f.a.requirementId,
       dependentRequirementId: f.b.requirementId, dependentRevisionId: f.b.revisionId,
       changedKeys: [KEY[f.quantity]],
-      explanation: `cross-document discrepancy — ${REQ_BY_ID[f.b.requirementId]?.name ?? f.b.requirementId} Rev ${f.b.revLabel} states ${f.b.display}, ${REQ_BY_ID[f.a.requirementId]?.name ?? f.a.requirementId} Rev ${f.a.revLabel} states ${f.a.display} (${f.quantity}, same equipment). ${f.reason}`,
+      explanation: `${f.class === "verified_discrepancy" ? "cross-document discrepancy" : "needs engineering clarification"} — ${REQ_BY_ID[f.b.requirementId]?.name ?? f.b.requirementId} Rev ${f.b.revLabel} states ${f.b.display}, ${REQ_BY_ID[f.a.requirementId]?.name ?? f.a.requirementId} Rev ${f.a.revLabel} states ${f.a.display} (${f.quantity}). ${f.reason}`,
       status: "open", createdAt: now, findingIds: [f.id], consistency: [snap(f)],
     };
     tasks.push(t);

@@ -78,7 +78,7 @@ export async function runPreflight(site: Site, templateId: string, releases: Rel
   const gated = new Set((site.engTasks ?? []).filter((x) => x.status !== "superseded").flatMap((x) => x.findingIds ?? []));
   let ai: PreflightReport["consistency"]["ai"] = "off";
   let aiNote: string | undefined;
-  const reviewable = cand.findings.filter((f) => ["verified_discrepancy", "potential_inconsistency", "insufficient_evidence"].includes(f.class)).slice(0, 4);
+  const reviewable = cand.findings.filter((f) => ["verified_discrepancy", "needs_clarification", "potential_inconsistency", "insufficient_evidence"].includes(f.class)).slice(0, 4);
   if (opts.ai) {
     if (!aiAvailable()) { ai = "unavailable"; aiNote = "OpenAI is not configured (AI_PROVIDER/OPENAI_API_KEY); deterministic results only."; }
     else {
@@ -102,7 +102,7 @@ export async function runPreflight(site: Site, templateId: string, releases: Rel
       detail: `${f.reason} Relation: ${f.relation}.${f.aiReview ? ` AI review (${f.aiReview.model}, advisory): same equipment ${f.aiReview.sameEquipment}, same interface ${f.aiReview.sameInterface}, suggests ${f.aiReview.suggestedClass.replace(/_/g, " ")}${f.aiReview.disagrees ? " — DISAGREES with the deterministic check; engineer to decide" : ""}. ${f.aiReview.explanation}` : ""}`,
       evidence: [obsRef(f, "a", h), obsRef(f, "b", h)],
       affectedFiles: [...file(ra), ...file(rb)],
-      responsibleRole: f.class === "verified_discrepancy" || f.class === "potential_inconsistency" ? "EQORE engineer" : undefined,
+      responsibleRole: ["verified_discrepancy", "needs_clarification", "potential_inconsistency"].includes(f.class) ? "EQORE engineer" : undefined,
       nextAction: consistencyAction(f, pendingSide, task?.status),
       chain: [revStep(ra, undefined, f.a.page), step(nid.finding(f.id), "finding", f.class.replace(/_/g, " "), h.finding(f.id), f.relation), revStep(rb, "compared with", f.b.page), ...(task ? [step(nid.task(task.id), "engineering_task", `Review ${task.id} (${task.status})`, h.task(), "gated by")] : []), { ...tplStep, via: "in package" }],
     });
@@ -125,7 +125,7 @@ export async function runPreflight(site: Site, templateId: string, releases: Rel
     for (const d of tm.addedChecklistDocuments) findings.push({ id: `CHG-add-${d.requirementId}`, category: "change_since_release", severity: "info", blocking: false, title: `${d.name} is required now but was not in R${last.number}`, detail: d.reason, evidence: [{ kind: "release", sourceId: last.id, label: `R${last.number} (frozen)`, href: h.rel(last.id) }], affectedFiles: file(latestApproved(site, d.requirementId)), nextAction: `Include it in R${last.number + 1}`, chain: [step(nid.rel(last.id), "release", `R${last.number}`, h.rel(last.id)), tplStep] });
   }
 
-  const byClass = Object.fromEntries((["verified_discrepancy", "potential_inconsistency", "explained_difference", "consistent", "insufficient_evidence"] as FindingClass[]).map((c) => [c, cand.findings.filter((f) => f.class === c).length])) as Record<FindingClass, number>;
+  const byClass = Object.fromEntries((["verified_discrepancy", "needs_clarification", "potential_inconsistency", "explained_difference", "consistent", "insufficient_evidence"] as FindingClass[]).map((c) => [c, cand.findings.filter((f) => f.class === c).length])) as Record<FindingClass, number>;
   const order = { blocker: 0, warning: 1, info: 2 } as const;
   findings.sort((x, y) => order[x.severity] - order[y.severity]);
   return {
@@ -139,13 +139,14 @@ export async function runPreflight(site: Site, templateId: string, releases: Rel
 
 function consistencySeverity(c: FindingClass, reviewed: boolean): PreflightFinding["severity"] {
   if (reviewed) return "info";
-  return c === "verified_discrepancy" || c === "potential_inconsistency" ? "warning" : "info";
+  return c === "verified_discrepancy" || c === "needs_clarification" || c === "potential_inconsistency" ? "warning" : "info";
 }
 function consistencyTitle(f: ConsistencyFinding, pending: Revision | undefined, taskStatus?: string) {
   const what = `${f.quantity}: ${f.a.display} (${REQ_BY_ID[f.a.requirementId]?.name} Rev ${f.a.revLabel}) vs ${f.b.display} (${REQ_BY_ID[f.b.requirementId]?.name} Rev ${f.b.revLabel})`;
   if (taskStatus === "resolved") return `Reviewed by an engineer — ${what}`;
   switch (f.class) {
     case "verified_discrepancy": return `${pending ? `If Rev ${pending.revLabel} is approved: ` : ""}verified discrepancy requiring review — ${what}`;
+    case "needs_clarification": return `${pending ? `If Rev ${pending.revLabel} is approved: ` : ""}needs engineering clarification (identity not established in both documents) — ${what}`;
     case "potential_inconsistency": return `Potential inconsistency (investigate) — ${what}`;
     case "explained_difference": return `Explained difference, no conflict — ${what}`;
     default: return `Insufficient evidence to compare — ${what}`;
@@ -154,6 +155,7 @@ function consistencyTitle(f: ConsistencyFinding, pending: Revision | undefined, 
 function consistencyAction(f: ConsistencyFinding, pending: Revision | undefined, taskStatus?: string) {
   if (taskStatus === "resolved") return "No action — resolved by an engineer (see the task resolution note)";
   if (f.class === "verified_discrepancy") return pending ? `Engineer: when reviewing ${REQ_BY_ID[pending.requirementId]?.name} Rev ${pending.revLabel}, decide which value is correct; approval will open a review task on the other document` : "Engineer: decide which value is correct and re-issue the outdated document";
+  if (f.class === "needs_clarification") return pending ? `Engineer: when reviewing Rev ${pending.revLabel}, confirm whether both values refer to the same equipment/interface; approval opens a review on the other document` : "Engineer: confirm whether both values refer to the same equipment and interface, then re-issue or resolve with a note";
   if (f.class === "potential_inconsistency") return "Engineer: check both documents and record a decision";
   if (f.class === "explained_difference") return "None — shown so reviewers can see why this is not a conflict";
   return "Optional: clarify which equipment the value refers to";

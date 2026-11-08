@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 /** Pre-submission check for one package (?templateId=) or all packages. Evidence quotes are shown to EQORE users only. */
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   return handle(() => {
-    const session = requireCap(req, "read_private");
+    const session = requireCap(req, "memory"); // derived from internal correspondence: EQORE only
     const site = getSite(params.id);
     if (!site) throw new StoreError(404, "site not found");
     const tid = new URL(req.url).searchParams.get("templateId");

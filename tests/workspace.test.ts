@@ -28,12 +28,13 @@ test("seeded portfolio comes from data/demo CSVs and metrics derive from the sto
 test("requirements later than the project stage are 'not yet required', never missing", () => {
   store.resetStore();
   const reg = documentRegister("S-1001");
-  assert.equal(reg.find((r) => r.requirementId === "om_manual")!.status, "not_yet_required");
+  // cx_report: commissioning stage, nothing on file (the hero's O&M manual is seeded early for the lifecycle demo).
+  assert.equal(reg.find((r) => r.requirementId === "cx_report")!.status, "not_yet_required");
   assert.equal(reg.find((r) => r.requirementId === "utility_bill")!.status, "missing");
   assert.equal(reg.find((r) => r.requirementId === "switchgear_datasheet")!.status, "approved");
   const f = findings(PM);
   assert.ok(f.some((x) => x.id === "MISS-S-1001-utility_bill"));
-  assert.ok(!f.some((x) => x.type === "missing_document" && x.projectId === "S-1001" && x.requirementId === "om_manual"));
+  assert.ok(!f.some((x) => x.type === "missing_document" && x.projectId === "S-1001" && x.requirementId === "cx_report"));
 });
 
 test("readiness only counts the package's own requirements", () => {

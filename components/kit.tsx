@@ -132,3 +132,19 @@ export function SectionTitle({ eyebrow, title, children, actions }: { eyebrow?: 
     </div>
   );
 }
+
+/** Server-rendered notice for screens a role may not open (authorization is enforced on the server; this only explains it). */
+export function Restricted({ what, role }: { what: string; role: string }) {
+  return (
+    <main className="mx-auto max-w-[900px] px-4 py-10 sm:px-6">
+      <div className="card p-6" data-testid="restricted">
+        <div className="eyebrow mb-1">Restricted</div>
+        <h1 className="text-xl font-semibold text-slate-900">{what} is internal to EQORE</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {role === "public" ? "Sign in with an EQORE identity to open it." : "Your role can see the projects and documents the access policy shares with you, but not internal communications, reviews or decision notes."}
+        </p>
+        <div className="mt-3 flex gap-2"><Link href="/" className="btn-ghost !text-xs">Back to Today</Link>{role !== "public" && <Link href="/projects" className="btn-ghost !text-xs">Projects</Link>}</div>
+      </div>
+    </main>
+  );
+}

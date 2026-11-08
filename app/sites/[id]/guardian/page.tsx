@@ -1,3 +1,4 @@
+import { Restricted } from "@/components/kit";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
@@ -13,6 +14,7 @@ export default function GuardianPage({ params, searchParams }: { params: { id: s
   const site = getSite(params.id);
   if (!site) notFound();
   const session = getSession();
+  if (session.role !== "eqore") return <Restricted what="Project Guardian" role={session.role} />;
   const tpl = TEMPLATE_BY_ID[searchParams.template ?? ""] ? searchParams.template! : "ahj_permit";
   const releases = getReleases(site.id).filter((r) => r.snapshot).sort((a, b) => b.builtAt.localeCompare(a.builtAt))
     .map((r) => ({ id: r.id, templateId: r.templateId, label: `${TEMPLATE_BY_ID[r.templateId]?.name ?? r.templateId} R${r.number} (${r.builtAt.slice(0, 10)})` }));

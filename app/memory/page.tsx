@@ -1,5 +1,5 @@
 import ActionCenter, { type MemoryContext } from "@/components/memory/ActionCenter";
-import { Page, PageHeader } from "@/components/kit";
+import { Page, PageHeader, Restricted } from "@/components/kit";
 import { can, getSession } from "@/lib/auth";
 import { selectedProvider } from "@/lib/extract";
 import { pkgLabel } from "@/lib/labels";
@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default function Memory({ searchParams }: { searchParams: { project?: string; type?: string; item?: string } }) {
   const s = getSession();
+  if (s.role !== "eqore") return <Restricted what="The Action Center" role={s.role} />;
   const sites = getSites();
   const project = sites.some((x) => x.id === searchParams.project) ? searchParams.project : undefined;
   const canManage = can(s, "memory");

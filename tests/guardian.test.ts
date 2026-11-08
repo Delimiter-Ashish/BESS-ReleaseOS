@@ -43,7 +43,9 @@ const obs = (o: Partial<Observation>): Observation => ({ id: "x", revisionId: "r
 test("context-aware classification: same equipment vs transformer sides vs rating/nominal vs unknown", () => {
   const sgA = obs({ revisionId: "a", equipment: "switchgear", identifiers: ["NSG-4000"], value: 600, measure: "rating" });
   const sgB = obs({ revisionId: "b", equipment: "switchgear", value: 480 });
-  assert.equal(classifyPair(sgA, sgB, [])?.class, "verified_discrepancy");
+  assert.equal(classifyPair(sgA, sgB, [])?.class, "needs_clarification", "role match without a shared identifier is not a confirmed conflict");
+  assert.equal(classifyPair(sgA, obs({ revisionId: "c", equipment: "switchgear", identifiers: ["NSG-4000"], value: 480 }), [])?.class, "verified_discrepancy", "same identifier, same (unstated) interface");
+  assert.equal(classifyPair(sgA, obs({ revisionId: "c", equipment: "switchgear", identifiers: ["NSG-4000"], side: "secondary", value: 480 }), [])?.class, "needs_clarification", "interface stated on one side only");
   const t1p = obs({ equipment: "transformer", identifiers: ["T1"], side: "primary", value: 13200 }), t1s = obs({ equipment: "transformer", identifiers: ["T1"], side: "secondary", value: 600 });
   const service = obs({ equipment: "service", side: "primary", value: 13200 });
   assert.equal(classifyPair(service, sgA, [{ primary: t1p, secondary: t1s }])?.class, "explained_difference", "opposite sides of T1");
@@ -86,11 +88,12 @@ test("Guardian demo: R1 → AHJ email → switchgear Rev B vs plan set → prefl
   // 4–5. Revised switchgear spec (pending) compared with the related plan set
   const sw = await file("SYNTHETIC_Switchgear_Spec_RevB.pdf", "switchgear_datasheet");
   const cand = findConsistency(site, { view: "candidate" }).findings;
-  const disc = cand.find((f) => f.class === "verified_discrepancy" && f.quantity === "voltage")!;
-  assert.ok(disc, "pending Rev B 600 V vs plan set 480 V at the AC disconnect");
+  const disc = cand.find((f) => f.class === "needs_clarification" && f.quantity === "voltage")!;
+  assert.ok(disc, "pending Rev B 600 V (NSG-4000) vs plan set “480 VAC AC disconnect” (no identifier) → needs clarification");
+  assert.match(disc.reason, /do not share an equipment identifier/);
   assert.equal(disc.a.revisionId, sw.revision.id); assert.equal(disc.b.requirementId, "plan_set");
   assert.match(disc.a.evidence, /600 VAC/); assert.equal(disc.a.page, 2); assert.match(disc.b.evidence, /480 VAC AC disconnect/);
-  assert.equal(findConsistency(site, { view: "approved" }).findings.filter((f) => f.class === "verified_discrepancy").length, 0, "approved set is still consistent");
+  assert.equal(findConsistency(site, { view: "approved" }).findings.filter((f) => f.class === "verified_discrepancy" || f.class === "needs_clarification").length, 0, "approved set is still consistent");
 
   // 6. Preflight (read-only): blockers with evidence + consistency warning with BOTH documents' evidence
   const before = JSON.stringify(site);
@@ -123,7 +126,7 @@ test("Guardian demo: R1 → AHJ email → switchgear Rev B vs plan set → prefl
   assert.equal(code(() => store.decideReview(pc.review.id, "approve", PM, "PM cannot approve", [planTask.id])), 403);
   store.decideReview(pc.review.id, "approve", ENG2, "ESS-13.0 updated to 600 VAC NSG-4000 (synthetic)", [planTask.id]);
   assert.equal(planTask.status, "resolved");
-  assert.equal(findConsistency(site, { view: "approved" }).findings.filter((f) => f.class === "verified_discrepancy").length, 0, "documents now consistent");
+  assert.equal(findConsistency(site, { view: "approved" }).findings.filter((f) => f.class === "verified_discrepancy" || f.class === "needs_clarification").length, 0, "documents now consistent");
   const vent = await file("SYNTHETIC_Ventilation_Plan_RevA.pdf", "ventilation_plan");
   store.decideReview(vent.review.id, "approve", ENG, "Ventilation plan reviewed (synthetic)");
   assert.equal(code(() => resolveItem(H, req.id, PM, { note: "pm" })), 403);

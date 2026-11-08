@@ -91,9 +91,9 @@ try {
   assert.equal(rep.canBuild, false); assert.ok(miss); assert.equal(miss.source.kind, "project_memory"); assert.equal(miss.source.communicationId, com.id);
   assert.ok(miss.responsibleParty && miss.nextAction && miss.affectedDocument);
   ok(`blocked: “${miss.message}” · source ${miss.source.sender} ${miss.source.sentAt.slice(0, 10)} · next: ${miss.nextAction}`);
-  const supView = await check(sup);
-  assert.equal(supView.blockers.find((b) => b.requirementId === "ventilation_plan").source.evidence, undefined);
-  ok("non-EQORE readers see the blocker without the internal email quote");
+  // Pre-submission detail is derived from internal correspondence → EQORE only (integration hardening).
+  assert.equal((await call(`/api/sites/${H}/presubmission?templateId=ahj_permit`, { cookie: sup })).status, 403);
+  ok("non-EQORE readers cannot open the pre-submission detail (403) — internal email quotes and senders stay internal");
   const pkgs = (await call(`/api/sites/${H}/releases`, { cookie: eng })).body.packages;
   const ahj = pkgs.find((p) => p.templateId === "ahj_permit");
   assert.equal((await call(`/api/sites/${H}/releases`, { cookie: eng, method: "POST", json: { templateId: "ahj_permit", note: "attempt while blocked", readinessToken: ahj.token } })).status, 409);

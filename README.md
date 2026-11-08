@@ -25,13 +25,15 @@ Sign in from the top-right menu (demo identities, passcodes shown): **A. Rivera*
 ## Verification
 
 ```bash
-npm test                                   # release-core (35) + app unit/workflow tests (9)
+npm test                                   # release-core (35) + app unit/workflow tests (30)
 npm run typecheck && npm run build
 BASE=http://localhost:3000 npm run e2e     # 25 HTTP checks against a running server (resets the store)
 npm run e2e:memory                         # 17 project-memory checks; starts its own server on :3102 incl. a restart
 E2E_PROVIDER=openai npm run e2e:memory     # same scenario with real OpenAI calls (synthetic email + PDF)
 npm run e2e:guardian                       # Project Guardian demo (16 checks incl. restart + transformer negative test)
 E2E_PROVIDER=openai npm run e2e:guardian   # same, with live OpenAI extraction + advisory AI review
+npm run e2e:studio                         # Submission Studio demo (13 checks: PDFs, hashes, access policy, restart)
+npm run e2e:lifecycle                      # Lifecycle assurance demo (13 checks, frozen clock 2026-11-07, incl. restart)
 node scripts/openai-contract.mjs           # OpenAI provider wiring vs a mock Responses endpoint (no key needed; needs a prior build)
 ```
 
@@ -112,6 +114,45 @@ requirement → build R2 (pins the ventilation plan). `SYNTHETIC_Injection_Email
 
 Build a release with the `token` from the report (`POST /api/sites/:id/releases { templateId, note, readinessToken }`).
 
+## Submission Studio — select → verify → approve → combined PDF release
+
+`/sites/S-1001/studio` (button on the site page). Typed contract: `lib/studio/types.ts`.
+
+1. **Purpose**: AHJ permit, planning board, utility interconnection, or custom (any checklist + any recipient).
+2. **Select**: every document with type, revision, approval status (current/superseded/pending), source, hash and
+   access policy. Add/remove, reorder, and split into **one or more combined PDFs** (default: plans vs equipment).
+3. **Verify** (`POST /studio/check`, read-only): the deterministic release gate (missing documents, confirmed
+   requirements, pending/outdated revisions, engineering and cross-document reviews) **plus** selection checks
+   (required not selected, unapproved or superseded revision selected, duplicates), **recipient authorization**,
+   encrypted sources; warnings for non-PDF sources, signatures/forms that merging may alter, and Guardian findings.
+   Each issue has its source/evidence and a concrete fix.
+4. **Approve**: an engineer signs off with a note. The selection is re-verified (token) before and after PDF generation.
+5. **Generate**: actual approved PDF bytes are merged in order behind a cover/index (document, revision, file,
+   SHA-256, page range). Non-PDF sources get a labeled slip sheet. The result is re-opened and its page count verified.
+   Combined PDFs are stored content-addressed; the sealed release snapshot freezes groups/order, selected versions,
+   every access decision and each output hash. The ZIP export carries the untouched originals plus `combined/*.pdf`.
+
+**Access policy** (`lib/studio/access.ts`): per document type, `view` (EQORE staff, engineers, suppliers, authority
+reviewers, facility) is separate from `releaseTo` (AHJ, planning, utility, supplier, owner). Default: EQORE-only
+visibility, releasable to **nobody**. EQORE users change rules with a note (history kept). Enforced server-side on
+file downloads, document pages, release ZIP/PDF downloads (EQORE, or the addressed recipient of a studio package
+whose documents were all authorized), and release generation. Seeded history (R1) has no frozen access decisions
+and stays EQORE-only.
+
+| Method & path | Who | Purpose |
+|---|---|---|
+| `GET /api/sites/:id/studio?purpose=` | EQORE | documents (+policy), default groups, purposes |
+| `POST /api/sites/:id/studio/check` `{ purpose, templateId?, recipient?, groups }` | EQORE | `{ check: StudioCheck, preflight }` |
+| `POST /api/sites/:id/studio/release` `{ …selection, note, token }` | engineer | sealed release + combined PDF outputs |
+| `GET /api/releases/:id/pdf?output=<groupId>` | EQORE / authorized recipient | frozen combined PDF (hash-checked) |
+| `GET/POST /api/sites/:id/access` | EQORE | policy table / record a rule `{ requirementId, view, releaseTo, note }` |
+
+**Correctness fixes in this release**: revision-history/revision-block rows are detected by section (`lib/sections.ts`)
+and never become current facts (rules extractor, AI grounding — values quoted from them are dropped with a warning —
+and Guardian observations). A cross-document difference is a *verified discrepancy* only when both documents share
+an equipment identifier and interface; otherwise it is *needs engineering clarification* (still routed to an engineer
+review, never called a conflict). Signed-out visitors see blocker counts, not descriptions, reviews or decision notes.
+
 ## Project Guardian — cross-source preflight
 
 `/sites/S-1001/guardian` (button on the site page). Typed contract: `lib/guardian/types.ts`.
@@ -154,6 +195,65 @@ Demo docs: `SYNTHETIC_Switchgear_Spec_RevB.pdf` (600 VAC) vs the seeded plan set
 verified discrepancy; `SYNTHETIC_Plan_Set_RevC.pdf` resolves it; `SYNTHETIC_Interconnection_Application_RevB.pdf`
 (13,200 V utility / T1 13,200/600 V / 600 V disconnect) is the negative test — explained, not flagged.
 
+## Compliance lifecycle — obligations after submission (`/sites/:id/lifecycle`)
+
+Ongoing documentation tracking from commissioning through operation, maintenance and decommissioning, built on the
+same documents, approvals, decisions and access policy (no second store; state lives in `Site.lifecycle`).
+
+- **Register** (`lib/lifecycle/register.ts`): one obligation per document type from the EQORE README NFPA 855 table
+  and approval list (commissioning plan/report, O&M manual, operations/maintenance/training records, EOP,
+  decommissioning plan/notice/report, permits, inspection sign-offs, IX approval, PTO, signage, SDS). Each carries its
+  source/citation, stage, responsible party, engineer reviewer, change triggers, access rule and history.
+  **No due dates are built in** — the README is a starting model, not a legal engine.
+- **Schedules** are configured per project (`add_obligation`, `set_due`), labeled *project-specific / synthetic*, with
+  who/why recorded. Status is derived from stored dates and review state at a **site-local date**
+  (`America/New_York` for MA): `not_applicable`, `needs_review`, `awaiting_review`, `overdue`, `due_soon` (configurable
+  warning window), `upcoming`, `open`, `completed`. `?asOf=` previews any date (read-only); `RELEASEOS_CLOCK` pins the
+  clock for tests/demos.
+- **Maintenance records**: an operator (facility or EQORE) records the event → status *awaiting review*; an uploaded
+  file is **not** proof. Only after an engineer approves the evidence revision and verifies it does the cycle complete.
+  Duplicates (same obligation/type/date) are rejected.
+- **Change → impacted obligation → human review → updated document**: a recorded site change is only a proposal
+  (also when derived from a project-memory suggestion). When an EQORE user confirms it, every obligation is assessed
+  against the requirement model's change triggers; affected obligations with an approved document get an impact with
+  *what changed, why, source, responsible party, reviewer, document to update* and **evidence quotes** where the current
+  revision still names the replaced equipment (revision-history rows ignored). Resolution needs a licensed engineer and
+  either a newer approved revision or a justified no-change decision (recorded as a `DecisionRecord`). Impacts appear in
+  the Guardian evidence graph (`chg:` → `imp:` → `obl:`).
+- **Access**: EQORE sees everything; facility/AHJ/supplier see only obligations whose document type the Studio access
+  policy lets them view, without notes, change records or evidence quotes. Files stay gated by `/api/files`.
+- **First-responder QR page** `/e/:id`: shows **only** documents an engineer explicitly published
+  (`publish_emergency`, allowed types: emergency info sheet, EOP, signage, SDS). Served only while still the current
+  approved revision with a matching sha256. Nothing is published by default.
+
+| Method & path | Who | Purpose |
+|---|---|---|
+| `GET /api/sites/:id/lifecycle[?asOf=]` | signed in (filtered by policy) | `LifecycleView` |
+| `POST /api/sites/:id/lifecycle` | per action (below) | `LifecycleAction` (typed union in `lib/lifecycle/types.ts`) |
+| `GET /api/public/sites/:id/emergency[/:pubId]` | public | explicitly published emergency documents only |
+
+Actions: `set_stage`, `settings`, `add_obligation`, `set_due` (EQORE) · `propose_change`, `record_event` (EQORE,
+facility) · `confirm_change`, `dismiss_change`, `withdraw_emergency` (EQORE) · `resolve_impact`, `verify_completion`,
+`publish_emergency` (engineer). Every mutating action needs a note.
+
+## Final integration (`feature/final-integration`)
+
+One app: Kaushik's Project Assurance UI (shell, Today, Projects, Inbox, Guardian Scan + evidence graph, Action Center,
+Submission Studio, Reviews, Activity, QR) on Ashish's latest backend (combined-PDF engine, recipient access policy,
+revision-history fixes, needs-clarification classification, lifecycle assurance, controlled emergency publication).
+
+- **Studio** (`/submissions`): Kaushik's stepper/drag-ordering/Guardian Scan/magnetic assembly, now generating real combined
+  PDFs per group via `/studio/check` + `/studio/release`. `/sites/:id/studio` redirects here.
+- **Lifecycle** (`/lifecycle?project=`) inside the shell; `/sites/:id/lifecycle` redirects here.
+- **Public QR** (`/p/:id`): published, current emergency documents only — no hard-coded instructions or contacts.
+- **Access**: Guardian, Action Center/Project memory, Studio, Reviews and Activity are EQORE-only screens; external roles see
+  policy-filtered projects/documents; release pages follow the download rule; `/api/workspace` and `/presubmission` are EQORE-only.
+
+```bash
+BASE=http://localhost:3000 npm run e2e:assurance   # Kaushik's UI-workflow checks (16)
+BASE=http://localhost:3000 npm run e2e:studio-ui   # Kaushik's Guardian → Studio UI checks (34)
+```
+
 ## Persistence
 
 Every mutation writes `RELEASEOS_DATA_DIR/state.json` atomically (default `./.data`, git-ignored); uploaded bytes
@@ -183,6 +283,8 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 |---|---|
 | `lib/store.ts` | The single authoritative store; all mutations and rules |
 | `lib/persistence.ts` | Atomic JSON snapshot + content-addressed upload bytes; integrity-checked reload |
+| `lib/studio/*` | Submission Studio: access policy, selection checks, combined PDF builder, generation |
+| `lib/sections.ts` | Revision-history section detection shared by extraction and Guardian |
 | `lib/guardian/*` | Evidence graph, cross-document consistency, preflight, Time Machine (contract: `types.ts`) |
 | `lib/memory/*` | Communication intelligence, project register, pre-submission report (contract: `types.ts`) |
 | `lib/engine-adapter.ts` | Revision/Fact/PinnedItem/decisions/tasks ⇄ release-core models; seals snapshots (lossless annotations) |
@@ -197,6 +299,12 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 - **Single-process JSON persistence** (survives restarts; not for multiple instances or high write volume).
 - Project-memory suggestions depend on the model; the deterministic fallback is a keyword scan and can miss items.
 - Demo auth with fixed passcodes; replace with SSO/OIDC.
-- Seeded documents other than the switchgear Rev A use deterministic placeholder bytes (labeled in ZIPs/UI).
+- Hero AHJ documents are synthetic PDFs (EQORE summaries / labeled placeholders — not manufacturer documents or
+  certifications); other seeded documents use deterministic placeholder bytes (slip sheets in combined PDFs).
+- Combined PDFs copy pages: digital signatures will not validate and form fields may not survive (warned; originals kept).
 - Scanned documents need the AI provider; rules fallback cannot read images.
 - AI output is decision support only; nothing here certifies NFPA 855, UL, NEC or AHJ compliance.
+- Lifecycle: change → obligation mapping uses the requirement model's trigger table (an assumption to confirm with
+  EQORE); evidence is a text match on the replaced identifier, so documents without a text layer get trigger-only
+  impacts. Schedules are one due date per cycle (no recurrence rules). The legacy QR page `/p/:id` (portfolio UI) still
+  shows hard-coded shutdown steps and site contacts; the explicitly-published page is `/e/:id`.

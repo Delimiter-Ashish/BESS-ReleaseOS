@@ -448,6 +448,17 @@ export const ON_DEMAND_REQUIREMENTS: Requirement[] = [
     triggers: [],
     keyFacts: ["revision.label", "doc.date", "doc.number"],
   },
+  {
+    // Additive (lifecycle): a short sheet EQORE may EXPLICITLY publish to the public QR page. Never auto-published.
+    id: "emergency_info_sheet",
+    name: "First-responder emergency information sheet",
+    stage: "operations",
+    codeRef: "EQORE README — QR access to designated emergency information (project practice; not a code requirement)",
+    mustInclude: "Site, ESS chemistry and location, disconnect location, do/don't instructions, 24/7 response line",
+    when: "Before operation; re-issue when emergency-response information changes",
+    access: ["eqore", "facility", "public"],
+    triggers: ["add_modules", "inverter_replace", "occupancy_change", "contact_change"],
+  },
 ];
 /** Every document type the app can file (default checklists + on-demand). */
 export const DOCUMENT_TYPES: Requirement[] = [...REQUIREMENTS, ...ON_DEMAND_REQUIREMENTS];
@@ -477,6 +488,13 @@ export const PACKAGE_TEMPLATES: PackageTemplate[] = [
     audience: "Utility (Eversource / National Grid / PG&E)",
     required: ["ix_application", "plan_set", "inverter_datasheet", "switchgear_datasheet", "utility_bill", "site_photos"],
     basis: "Interconnection tariff application requirements",
+  },
+  {
+    id: "planning",
+    name: "Planning board package",
+    audience: "Town planning board",
+    required: ["plan_set", "property_record", "site_photos"],
+    basis: "Illustrative site-plan review set (Submission Studio purpose: planning)",
   },
   {
     id: "closeout",

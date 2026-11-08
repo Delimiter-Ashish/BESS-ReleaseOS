@@ -9,6 +9,7 @@ import { groundExtraction } from "./ai/schema";
 import { FACT_KEYS } from "./facts";
 import type { AllowedMedia, TextLayer } from "./pdf";
 import { REQ_BY_ID } from "./requirements";
+import { currentText } from "./sections";
 import type { Fact } from "./types";
 
 export { FACT_KEYS } from "./facts";
@@ -120,14 +121,16 @@ export function rulesExtract(fileName: string, layer: TextLayer): Omit<Extractio
   // Only look for facts relevant to the classified type (avoids reading project context as equipment ratings).
   const keyFacts = t ? REQ_BY_ID[t[0]]?.keyFacts : undefined;
   const allowed = keyFacts ? new Set([...keyFacts, ...ALWAYS_KEYS]) : undefined;
+  // Revision-history / revision-block entries describe past changes: never read them as current facts.
+  const current = layer.pages.map(currentText);
   if (layer.hasText) {
     for (const [key, patterns] of FACT_RULES) {
       if (allowed && !allowed.has(key)) continue;
       let hit: { m: RegExpExecArray; page: number; pageText: string } | undefined;
       outer: for (const re of patterns) {
-        for (let p = 0; p < layer.pages.length; p++) {
-          const m = re.exec(layer.pages[p]);
-          if (m) { hit = { m, page: p + 1, pageText: layer.pages[p] }; break outer; }
+        for (let p = 0; p < current.length; p++) {
+          const m = re.exec(current[p]);
+          if (m) { hit = { m, page: p + 1, pageText: current[p] }; break outer; }
         }
       }
       if (!hit) continue;

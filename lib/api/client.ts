@@ -50,9 +50,15 @@ export interface ReleaseResponse { id: string; siteId: string; templateId: strin
 export const buildRelease = (siteId: string, templateId: string, note: string, readinessToken: string) =>
   call<ReleaseResponse>(`/api/sites/${encodeURIComponent(siteId)}/releases`, json({ templateId, note, readinessToken }), (j) => j.release as ReleaseResponse);
 
-// ---------- Submission Studio: contracts NOT yet implemented by the backend ----------
-// Documented in docs/FRONTEND_CONTRACTS.md. The UI shows these as "backend pending" and never simulates them.
-export interface CombinedPdfRequest { releaseId: string; groups: { title: string; revisionIds: string[] }[] }
-export interface CombinedPdfResponse { ok: true; files: { groupTitle: string; fileId: string; fileName: string; pages: number; sha256: string; url: string }[] }
-export const COMBINED_PDF_ENDPOINT = "POST /api/releases/:id/combined-pdf";
-export const RECIPIENT_CHECK_ENDPOINT = "POST /api/sites/:id/submissions/check-recipient";
+// ---------- Submission Studio (real PDF engine: lib/studio/*) ----------
+import type { CombinedPdfEntry, PurposeId, SelectionGroup, StudioCheck } from "@/lib/studio/types";
+export interface StudioSelectionBody { purpose: PurposeId; templateId?: string; recipient?: string; groups: SelectionGroup[] }
+export interface StudioOutput { groupId: string; name: string; fileName: string; sha256: string; pageCount: number; coverPages: number; href: string; warnings: string[]; entries: CombinedPdfEntry[] }
+
+/** POST /api/sites/:id/studio/check — release gate + selection + recipient authorization + Guardian (read-only). */
+export const studioCheck = (siteId: string, sel: StudioSelectionBody) =>
+  call<StudioCheck>(`/api/sites/${encodeURIComponent(siteId)}/studio/check`, json(sel), (j) => j.check as StudioCheck);
+
+/** POST /api/sites/:id/studio/release — engineer signoff → real combined PDFs from approved bytes + sealed release. */
+export const studioRelease = (siteId: string, sel: StudioSelectionBody & { note: string; token: string }) =>
+  call<{ release: ReleaseResponse; outputs: StudioOutput[] }>(`/api/sites/${encodeURIComponent(siteId)}/studio/release`, json(sel), (j) => ({ release: j.release as ReleaseResponse, outputs: j.outputs as StudioOutput[] }));

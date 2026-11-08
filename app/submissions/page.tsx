@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Page, PageHeader, ReadinessPill, SyntheticNote } from "@/components/kit";
+import { Page, PageHeader, ReadinessPill, SyntheticNote, Restricted } from "@/components/kit";
 import SubmissionStudio, { type LibraryDoc, type StudioRelease } from "@/components/studio/SubmissionStudio";
 import { can, getSession } from "@/lib/auth";
 import { pkgLabel } from "@/lib/labels";
@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default function Submissions({ searchParams }: { searchParams: { project?: string; package?: string; status?: string; view?: string } }) {
   const s = getSession();
+  if (s.role !== "eqore") return <Restricted what="Submission Studio" role={s.role} />;
   const sites = getSites();
   const portfolio = projectSummaries().flatMap((p) => p.packages.map((k) => ({ ...k, projectId: p.id, projectName: p.name })));
 

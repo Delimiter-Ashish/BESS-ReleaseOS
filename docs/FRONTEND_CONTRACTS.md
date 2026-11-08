@@ -31,34 +31,31 @@ Server-rendered pages read the same store through `lib/workspace.ts` (view model
 
 `lib/graph-traversal.ts` runs BFS over the returned edges. It does **not** add edges. The only interpretation is a fixed reading direction per edge type (information flow: communication → requirement → document → revision → finding → review → package → release), listed in `FLOW`. If you add an `EdgeType`, please add it there too (TypeScript will flag it).
 
-## Studio decisions that depend on the backend
+## Submission Studio — now on the real PDF engine (final integration)
 
-- **Document order** is preserved by appending a compact line to the signoff note: `[Studio order → <recipient>] 1. plan_set Rev B; 2. …`. Notes are capped at 1000 chars by `requireNote`; the UI budgets the user's text so the order line always fits. A proper field would be better (see below).
-- **Supplemental documents** (not on the checklist) are listed in that order line only. The release engine pins the checklist.
-- **One output group** only.
+The previously "pending" Studio contracts are implemented by `lib/studio/*` and wired into `components/studio/SubmissionStudio.tsx`
+through `lib/api/client.ts` (`studioCheck`, `studioRelease`). Types: `lib/studio/types.ts`.
 
-## Needed from the backend (NOT implemented — the UI shows these as "backend pending")
+| UI step | Endpoint | Notes |
+|---|---|---|
+| Selection checks (auto, debounced) | `POST /api/sites/:id/studio/check` `{ purpose, templateId?, recipient?, groups }` | release gate + selection (required/unapproved/superseded/duplicates) + **server-side recipient authorization** + Guardian warnings; returns `token` |
+| Sign off, generate & seal | `POST /api/sites/:id/studio/release` `{ …selection, note, token }` | engineer only; real combined PDFs (cover/index, page ranges, SHA-256), groups + order + access decisions frozen in the snapshot |
+| Download each PDF | `GET /api/releases/:id/pdf?output=<groupId>` | EQORE or the addressed recipient of a fully authorized package; hash-checked |
 
-```
-POST /api/releases/:id/combined-pdf
-  body  { groups: [{ title: string, revisionIds: string[] }] }       // order = array order; revisionIds must be pinned in the release
-  200   { ok: true, files: [{ groupTitle, fileId, fileName, pages, sha256, url }] }
-  409   when a revision is not pinned / file bytes missing (seeded metadata-only revisions)
-  // UI: "Generate combined PDF" stays disabled until this route answers; downloads appear only from this response.
+- Order and grouping are real fields (no note-line workaround); multiple output groups are supported (up to 8).
+- Recipients are the access-policy recipients: `ahj`, `planning`, `utility`, `owner`, `supplier`. A non-default recipient makes the
+  submission a server-checked "custom" purpose.
+- The draft (order, groups, recipient) is still kept in the browser's localStorage, labelled as such.
 
-POST /api/sites/:id/submissions/check-recipient
-  body  { templateId, recipient: "ahj" | "utility" | "facility" | "eqore", revisionIds: string[] }
-  200   { ok: true, allowed: [{ revisionId }], blocked: [{ revisionId, reason }] }
-  // Today the UI only compares against Requirement.access (declared audience) and says so.
+## Lifecycle (final integration)
 
-POST /api/sites/:id/releases   (additive field request)
-  body  { …existing, documentOrder?: { requirementId: string, revisionId: string }[], recipient?: string }
-  // Frozen into the snapshot instead of the note line above.
+`/lifecycle?project=` (nav: PM "Lifecycle", engineer "Lifecycle Reviews", facility "Obligations & records") uses
+`GET/POST /api/sites/:id/lifecycle` (`lib/lifecycle/types.ts`). Upload/review actions link to `/inbox?expect=` and `/reviews`.
 
-Server-side Studio draft (optional)
-  GET/PUT /api/sites/:id/submissions/draft?templateId=   { order, recipient, updatedBy, updatedAt }
-  // Today the draft lives in the browser's localStorage, labelled as such.
-```
+## Public QR
+
+`/p/:id` shows only engineer-published emergency documents (`publish_emergency`), served by `/api/public/sites/:id/emergency/:pubId`
+while still current and hash-matching. `/e/:id` redirects there. The root layout renders `/p/*` without the workspace shell or session data.
 
 ## Shared files this branch changed (please review)
 

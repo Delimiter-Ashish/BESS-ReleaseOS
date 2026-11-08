@@ -30,6 +30,9 @@ const TYPE_STYLE: Record<string, { fill: string; stroke: string; glyph: (n: Grap
   decision: { fill: "#10241c", stroke: "#34d399", glyph: () => "✓", name: "Decision" },
   template: { fill: "#0f1c3a", stroke: "#60a5fa", glyph: () => "▤", name: "Package" },
   release: { fill: "#0f2433", stroke: "#38bdf8", glyph: () => "⛁", name: "Release" },
+  site_change: { fill: "#2a1c10", stroke: "#fb923c", glyph: () => "Δ", name: "Site change" },
+  impact: { fill: "#2a1c10", stroke: "#fb923c", glyph: () => "↻", name: "Lifecycle re-review" },
+  obligation: { fill: "#1a1f2e", stroke: "#94a3b8", glyph: () => "◷", name: "Lifecycle obligation" },
 };
 const statusRing = (n: GraphNode) => {
   const s = String(n.data?.status ?? n.data?.class ?? "");

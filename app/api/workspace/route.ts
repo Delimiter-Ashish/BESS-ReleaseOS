@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   return handle(() => {
-    const s = requireCap(req, "read_private");
+    const s = requireCap(req, "memory"); // internal projection (reviews, findings): EQORE only
     const m = todayMetrics();
     const q = reviewQueue(s);
     const f = findings(s);

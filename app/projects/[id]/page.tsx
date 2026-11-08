@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Page, PageHeader, SectionTitle, SyntheticNote, Term } from "@/components/kit";
+import { Page, PageHeader, SectionTitle, SyntheticNote, Term, Restricted } from "@/components/kit";
 import DocumentRegister from "@/components/projects/DocumentRegister";
 import { getSession } from "@/lib/auth";
+import { isInternal, registerFor } from "@/lib/view-access";
 import { customerOf, partiesFor } from "@/lib/demo-data";
 import { PACKAGE_BLURB, pkgLabel, SECTION, STATE_NAME } from "@/lib/labels";
 import { PACKAGE_TEMPLATES, STAGES, stageIndex } from "@/lib/requirements";
@@ -15,8 +16,10 @@ export default function Project({ params, searchParams }: { params: { id: string
   const site = getSite(params.id);
   if (!site) notFound();
   const s = getSession();
+  if (s.role === "public") return <Restricted what="Project details" role={s.role} />;
+  const internal = isInternal(s);
   const p = projectSummaries().find((x) => x.id === site.id)!;
-  const rows = documentRegister(site.id);
+  const rows = registerFor(s, site, documentRegister(site.id));
   const customer = customerOf(site.id)?.replace(/ \(fictional\)$/, "") ?? site.name;
   const inverterCount = site.inverter?.match(/^(\d+)\s*×/)?.[1];
   const pkgs = PACKAGE_TEMPLATES.map((t) => {
@@ -30,8 +33,8 @@ export default function Project({ params, searchParams }: { params: { id: string
     later: { label: "Needed later", cls: "bg-slate-100 text-slate-600 ring-slate-200", note: (x: (typeof pkgs)[number]) => `Assembled at the ${STAGES[stageIndex(TEMPLATE_STAGE[x.t.id])].label} stage — not a current blocker.` },
     released: { label: "Released", cls: "bg-teal-50 text-teal-700 ring-teal-200", note: (x: (typeof pkgs)[number]) => `R${x.latest!.number} sealed by ${x.latest!.builtBy}. Awaiting external approval — permits and utility approvals are issued outside ReleaseOS.` },
     ready: { label: "Ready for authorized signoff", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200", note: () => "All configured checks pass. An engineer signs off in Submission Studio." },
-    blocked: { label: "Missing now", cls: "bg-red-50 text-red-700 ring-red-200", note: (x: (typeof pkgs)[number]) => x.r.issues[0]?.message ?? "Blocked by the release gate." },
-    review: { label: "Pending engineer review", cls: "bg-violet-50 text-violet-700 ring-violet-200", note: (x: (typeof pkgs)[number]) => x.r.issues[0]?.message ?? "Engineer review open." },
+    blocked: { label: "Missing now", cls: "bg-red-50 text-red-700 ring-red-200", note: (x: (typeof pkgs)[number]) => (internal ? x.r.issues[0]?.message : undefined) ?? "Blocked by the release gate." },
+    review: { label: "Pending engineer review", cls: "bg-violet-50 text-violet-700 ring-violet-200", note: (x: (typeof pkgs)[number]) => (internal ? x.r.issues[0]?.message : undefined) ?? "Engineer review open." },
   } as const;
 
   return (
@@ -39,10 +42,13 @@ export default function Project({ params, searchParams }: { params: { id: string
       <PageHeader eyebrow={<><Link href="/projects" className="hover:underline">Projects</Link> · {site.id}</>} title={site.name}
         subtitle={`${site.city}, ${STATE_NAME[site.state] ?? site.state} · now in ${p.stageLabel} (stage ${p.stageIndex + 1} of ${STAGES.length}) · ${p.provenance}`}
         actions={<>
+          {internal && <>
           {s.engineer ? <Link href={`/reviews?project=${site.id}`} className="btn-primary">Open reviews</Link> : <Link href={`/guardian?project=${site.id}&run=1`} className="btn-primary">Run Guardian Scan</Link>}
           <Link href={`/inbox?project=${site.id}`} className="btn-ghost">Import</Link>
           <Link href={`/submissions?project=${site.id}`} className="btn-ghost">Submission Studio</Link>
-          <Link href={`/activity?project=${site.id}`} className="btn-ghost">{SECTION.audit}</Link>
+          </>}
+          {(internal || s.role === "facility") && <Link href={`/lifecycle?project=${site.id}`} className="btn-ghost">Lifecycle</Link>}
+          {internal && <Link href={`/activity?project=${site.id}`} className="btn-ghost">{SECTION.audit}</Link>}
           <Link href={`/qr#${site.id}`} className="btn-ghost">{SECTION.qr}</Link>
         </>} />
 
@@ -129,11 +135,11 @@ export default function Project({ params, searchParams }: { params: { id: string
                 </div>
                 <div className="mt-3 text-xs text-slate-600">{st.note(x)}</div>
                 <div className="mt-2 text-[11px] text-slate-500">{x.r.readyCount}/{x.r.items.length} documents ready · {x.r.issues.length} gate issue{x.r.issues.length === 1 ? "" : "s"}{x.r.releases.length ? ` · ${x.r.releases.length} release(s)` : ""}</div>
-                <div className="mt-auto flex flex-wrap gap-2 pt-3">
+                {internal && <div className="mt-auto flex flex-wrap gap-2 pt-3">
                   <Link href={`/submissions?project=${site.id}&package=${x.t.id}`} className="btn-ghost !py-1 !text-xs">Open in Studio</Link>
                   <Link href={`/guardian?project=${site.id}&template=${x.t.id}&run=1`} className="btn-ghost !py-1 !text-xs">Guardian scan</Link>
                   {x.latest && <Link href={`/sites/${site.id}/releases/${encodeURIComponent(x.latest.id)}`} className="btn-ghost !py-1 !text-xs">R{x.latest.number}</Link>}
-                </div>
+                </div>}
               </div>
             );
           })}

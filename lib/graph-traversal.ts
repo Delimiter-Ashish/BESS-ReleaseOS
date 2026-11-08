@@ -25,6 +25,9 @@ export const FLOW: Record<EdgeType, "forward" | "reverse"> = {
   gated_by: "forward", // finding → review task
   reviews: "forward",
   requires: "reverse", // document family → package that requires it
+  may_affect: "forward", // confirmed site change → lifecycle impact (re-review request)
+  tracks: "reverse", // document family → lifecycle obligation that tracks it
+  evidenced_by: "reverse", // evidence revision → obligation it completed
 };
 
 export interface FlowEdge { edge: GraphEdge; src: string; dst: string }
@@ -92,15 +95,16 @@ export function pathTo(t: Traversal, target: string): Reach[] {
 
 /** Visual lanes, left → right, following the information-flow direction. */
 export const LANES: { id: string; label: string; types: NodeType[] }[] = [
-  { id: "sources", label: "Communications", types: ["communication"] },
+  { id: "sources", label: "Communications · site changes", types: ["communication", "site_change"] },
   { id: "memory", label: "Requirements", types: ["memory_item"] },
   { id: "docs", label: "Documents", types: ["document_family"] },
   { id: "revs", label: "Revisions", types: ["revision"] },
   { id: "facts", label: "Facts", types: ["fact", "observation"] },
   { id: "findings", label: "Findings", types: ["finding"] },
-  { id: "reviews", label: "Reviews", types: ["engineering_task", "review_task"] },
+  { id: "reviews", label: "Reviews", types: ["engineering_task", "review_task", "impact"] },
   { id: "decisions", label: "Decisions", types: ["decision"] },
   { id: "packages", label: "Packages", types: ["template"] },
   { id: "releases", label: "Releases", types: ["release"] },
+  { id: "obligations", label: "Lifecycle obligations", types: ["obligation"] },
 ];
 export const laneOf = (t: NodeType) => LANES.findIndex((l) => l.types.includes(t));
