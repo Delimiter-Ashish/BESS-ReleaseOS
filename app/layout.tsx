@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Public first-responder pages: no workspace shell, no session, user directory or portfolio metrics in the payload.
-  if ((headers().get("x-ros-path") ?? "").startsWith("/p/")) {
+  const path = headers().get("x-ros-path") ?? "";
+  if (path.startsWith("/p/") || path === "/intro") {
     return (
       <html lang="en">
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
@@ -30,14 +31,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const s = getSession();
   const provider = selectedProvider();
   const keyed = provider === "openai" ? !!process.env.OPENAI_API_KEY : provider === "anthropic" ? !!process.env.ANTHROPIC_API_KEY : true;
-  const m = todayMetrics();
-  const badges = {
-    reviews: m.pendingReviews + m.openDependencies,
-    dependencies: m.openDependencies,
-    actions: findings(s).filter((f) => f.lifecycle === "action_required" && f.severity === "high").length,
-    blocked: m.blockedSubmissions.length,
-    confirm: m.toConfirm,
-  };
+  // Portfolio badge counts are internal: computed (and serialized) for EQORE sessions only.
+  const internal = s.role === "eqore";
+  const m = internal ? todayMetrics() : undefined;
+  const badges = m
+    ? { reviews: m.pendingReviews + m.openDependencies, dependencies: m.openDependencies, actions: findings(s).filter((f) => f.lifecycle === "action_required" && f.severity === "high").length, blocked: m.blockedSubmissions.length, confirm: m.toConfirm }
+    : { reviews: 0, dependencies: 0, actions: 0, blocked: 0, confirm: 0 };
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>

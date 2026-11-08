@@ -299,7 +299,7 @@ export default function SubmissionStudio(props: {
 
       {/* F. Assemble & release */}
       <Section id="step-5" letter="F" title="Assemble & release">
-        <Assembly docs={selected} phase={phase} onDone={() => setAnimDone(true)} />
+        <Assembly docs={selected} phase={phase} outputs={outputs} releaseNumber={rel?.number} onDone={() => setAnimDone(true)} />
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" onClick={seal} disabled={!gateOk || !props.canSign || note.trim().length < 3 || phase === "assembling" || phase === "sealed" || selected.length === 0} className="btn-primary" data-testid="studio-seal">
             {phase === "assembling" ? "Generating PDFs & sealing on the server…" : phase === "sealed" ? `R${rel?.number} sealed` : `Sign off, generate ${selection.groups.length} PDF${selection.groups.length === 1 ? "" : "s"} & seal R${nextNumber}`}
@@ -320,6 +320,7 @@ export default function SubmissionStudio(props: {
                 <a href={`/api/releases/${encodeURIComponent(rel.id)}/download`} className="btn-ghost">Download ZIP (originals + PDFs)</a>
                 <a href={`/api/releases/${encodeURIComponent(rel.id)}/download?format=json`} target="_blank" className="btn-ghost">Manifest</a>
                 <Link href={`/sites/${site.id}/releases/${encodeURIComponent(rel.id)}`} className="btn-ghost">Release page</Link>
+                <Link href={`/guardian?project=${site.id}&template=${props.templateId}&tab=time&release=${encodeURIComponent(rel.id)}`} className="btn-ghost">Time Machine</Link>
               </div>
             </div>
             <div className="mt-4 space-y-3" data-testid="studio-outputs">
@@ -405,39 +406,74 @@ function Issue({ i }: { i: StudioIssue }) {
 }
 const Check = ({ ok, warn, children }: { ok?: boolean; warn?: boolean; children: React.ReactNode }) => <li className={`flex gap-2 ${ok ? "text-emerald-700" : warn ? "text-amber-700" : "text-red-700"}`}><span>{ok ? "✓" : warn ? "!" : "✕"}</span><span>{children}</span></li>;
 
-/** Magnetic assembly: cards align in the chosen order while the server request runs; the seal appears only after the server confirms. */
-function Assembly({ docs, phase, onDone }: { docs: LibraryDoc[]; phase: "idle" | "assembling" | "sealed" | "failed"; onDone: () => void }) {
-  const W = 190, H = 64, COLS = 3;
-  const stacked = phase === "assembling" || phase === "sealed";
+/**
+ * Magnetic assembly. While the server request runs, cards stay where they are (honest "generating" state). Only AFTER the
+ * server confirms do they fly into one stack per real output PDF, in the server's frozen order; then an electric outline
+ * traces each finished stack. The animation never implies it produced the PDFs — the server already has.
+ */
+function Assembly({ docs, phase, outputs, releaseNumber, onDone }: { docs: LibraryDoc[]; phase: "idle" | "assembling" | "sealed" | "failed"; outputs: StudioOutput[]; releaseNumber?: number; onDone: () => void }) {
+  const W = 190, H = 64, COLS = 3, STEP = 13, TOP = 52;
+  const sealed = phase === "sealed" && outputs.length > 0;
   const rows = Math.ceil(docs.length / COLS);
-  const height = stacked ? Math.max(120, 40 + docs.length * 14 + H) : Math.max(120, rows * (H + 14) + 10);
+  // Final position of each card: (group column, depth in stack) taken from the server's output entries.
+  const slot = new Map<string, { g: number; k: number }>();
+  outputs.forEach((o, g) => o.entries.forEach((e, k) => { const d = docs.find((x) => x.approved?.id === e.revisionId); if (d) slot.set(d.requirementId, { g, k }); }));
+  const deepest = Math.max(1, ...outputs.map((o) => o.entries.length));
+  const stackH = H + (deepest - 1) * STEP;
+  const height = sealed ? TOP + stackH + 64 : Math.max(120, rows * (H + 14) + 10);
+  const settle = 650 + docs.length * 70;
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
   useEffect(() => {
     if (phase !== "sealed") return;
     const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    // Transition length is fixed by CSS below; the server has already confirmed — this only lets the cards finish moving.
-    const t = setTimeout(() => doneRef.current(), reduced ? 0 : 700 + docs.length * 60);
+    const t = setTimeout(() => doneRef.current(), reduced ? 0 : settle + 900);
     return () => clearTimeout(t);
-  }, [phase, docs.length]);
+  }, [phase, settle]);
   if (!docs.length) return <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Select at least one approved document.</div>;
+  const n = Math.max(1, outputs.length);
+  const colX = (g: number) => `calc(${((g + 0.5) / n) * 100}% - ${W / 2}px)`;
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-night-950 transition-[height] duration-500" style={{ height }} aria-live="polite" aria-label={phase === "assembling" ? "Server is sealing the release" : phase === "sealed" ? "Release sealed" : "Package preview"}>
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(400px_200px_at_50%_30%,rgba(34,211,238,0.10),transparent_70%)]" />
+    <div className="relative overflow-hidden rounded-2xl bg-night-950 transition-[height] duration-500" style={{ height }} data-testid="assembly" data-phase={phase}
+      aria-live="polite" aria-label={phase === "assembling" ? "Server is generating the PDFs and sealing the release" : sealed ? `Release R${releaseNumber} sealed` : "Package preview"}>
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(420px_200px_at_50%_30%,rgba(85,221,229,0.10),transparent_70%)]" />
+      {sealed && (
+        <div className="ros-rise absolute inset-x-0 top-3 z-50 text-center" style={{ animationDelay: `${settle}ms` }}>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.32em] text-[#72E1BB]">Release sealed · R{releaseNumber}</span>
+        </div>
+      )}
       {docs.map((d, i) => {
         const gx = 16 + (i % COLS) * (W + 14), gy = 12 + Math.floor(i / COLS) * (H + 14);
-        const sx = `calc(50% - ${W / 2}px)`, sy = 20 + i * 14;
+        const sl = slot.get(d.requirementId);
+        const toStack = sealed && sl;
         return (
-          <div key={d.requirementId} className="absolute rounded-xl bg-night-700 p-2.5 shadow-lg ring-1 ring-inset ring-[rgba(148,163,184,0.18)]"
-            style={{ width: W, height: H, left: stacked ? sx : gx, top: stacked ? sy : gy, transform: stacked ? "rotate(0deg)" : `rotate(${i % 2 ? 1.2 : -1.2}deg)`, transition: `left .6s cubic-bezier(.2,.8,.2,1) ${i * 60}ms, top .6s cubic-bezier(.2,.8,.2,1) ${i * 60}ms, transform .6s ${i * 60}ms, box-shadow .4s`, zIndex: i, boxShadow: phase === "sealed" ? "0 0 0 1px rgba(45,212,191,.45)" : undefined }}>
-            <div className="flex items-center justify-between text-[10px] text-ink-muted"><span className="font-mono">{String(i + 1).padStart(2, "0")}</span><span>Rev {d.approved?.revLabel}</span></div>
+          <div key={d.requirementId} className={`absolute rounded-xl bg-night-700 p-2.5 shadow-lg ring-1 ring-inset ${phase === "assembling" ? "ring-[rgba(85,221,229,0.35)]" : toStack ? "ring-[rgba(114,225,187,0.35)]" : "ring-[rgba(148,163,184,0.18)]"}`}
+            style={{ width: W, height: H, left: toStack ? colX(sl!.g) : gx, top: toStack ? TOP + sl!.k * STEP : gy, transform: toStack ? "rotate(0deg)" : `rotate(${i % 2 ? 1.2 : -1.2}deg)`, zIndex: toStack ? 10 + sl!.k : i,
+              transition: `left .7s cubic-bezier(.2,.9,.25,1.1) ${i * 70}ms, top .7s cubic-bezier(.2,.9,.25,1.1) ${i * 70}ms, transform .7s ${i * 70}ms` }}>
+            {phase === "assembling" && <span aria-hidden className="ros-sweep pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-transparent via-[rgba(85,221,229,0.14)] to-transparent" style={{ animationDelay: `${(i % 6) * 110}ms` }} />}
+            <div className="flex items-center justify-between text-[10px] text-ink-muted"><span className="font-mono">{toStack ? `PDF ${sl!.g + 1} · ${String(sl!.k + 1).padStart(2, "0")}` : String(i + 1).padStart(2, "0")}</span><span>Rev {d.approved?.revLabel}</span></div>
             <div className="mt-0.5 truncate text-xs font-medium text-ink">{d.name}</div>
             <div className="truncate text-[10px] text-ink-muted">{d.approved?.fileName}</div>
           </div>
         );
       })}
-      {phase === "assembling" && <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-[rgba(255,255,255,0.05)]"><span className="ros-indeterminate absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-[#22d3ee] to-transparent" /></div>}
-      {phase === "assembling" && <div className="absolute bottom-3 right-4 text-[11px] text-[#67e8f9]">Waiting for the release engine…</div>}
+      {sealed && outputs.map((o, g) => {
+        const per = 2 * (W + 12) + 2 * (o.entries.length - 1) * STEP + 2 * (H + 12);
+        return (
+          <div key={o.groupId} className="pointer-events-none absolute z-40" style={{ left: colX(g), top: TOP, width: W, height: H + (o.entries.length - 1) * STEP }}>
+            <svg aria-hidden className="absolute -left-1.5 -top-1.5 overflow-visible" width={W + 12} height={H + (o.entries.length - 1) * STEP + 12}>
+              <rect x="0.75" y="0.75" rx="14" width={W + 10.5} height={H + (o.entries.length - 1) * STEP + 10.5} fill="none" stroke="#55DDE5" strokeWidth="1.5" className="ros-trace" style={{ strokeDasharray: per, strokeDashoffset: per, animationDelay: `${settle}ms`, filter: "drop-shadow(0 0 6px rgba(85,221,229,.7))" }} />
+            </svg>
+            <div className="ros-rise absolute -bottom-12 left-0 w-full text-center" style={{ animationDelay: `${settle + 200}ms` }}>
+              <div className="truncate text-[11px] font-semibold text-ink">{o.name}</div>
+              <div className="font-mono text-[10px] text-ink-muted">{o.pageCount} pages · {o.sha256.slice(0, 10)}…</div>
+            </div>
+          </div>
+        );
+      })}
+      {phase === "assembling" && <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-[rgba(255,255,255,0.05)]"><span className="ros-indeterminate absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-[#55DDE5] to-transparent" /></div>}
+      {phase === "assembling" && <div className="absolute bottom-3 right-4 text-[11px] text-[#67e8f9]">Server is merging approved PDFs and sealing the release…</div>}
+      {phase === "failed" && <div className="absolute bottom-3 right-4 text-[11px] text-[#fca5a5]">Not sealed — your selection is unchanged.</div>}
     </div>
   );
 }

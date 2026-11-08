@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Page, PageHeader, ReadinessPill, Restricted, SyntheticNote } from "@/components/kit";
 import { getSession } from "@/lib/auth";
 import { getSites } from "@/lib/store";
-import { registerFor } from "@/lib/view-access";
+import { externalScope, isInternal, registerFor } from "@/lib/view-access";
 import DocumentRegister from "@/components/projects/DocumentRegister";
 import { pkgLabel } from "@/lib/labels";
 import { STAGES } from "@/lib/requirements";
@@ -13,7 +13,13 @@ export const dynamic = "force-dynamic";
 export default function Projects({ searchParams }: { searchParams: { view?: string; status?: string } }) {
   const s = getSession();
   if (s.role === "public") return <Restricted what="The project portfolio" role={s.role} />;
-  const projects = projectSummaries();
+  // External roles: only projects with document types shared with them; counts from those shared records only.
+  const scope = isInternal(s) ? undefined : new Map(externalScope(s, getSites(), documentRegister).map((x) => [x.site.id, x.rows]));
+  const projects = projectSummaries().filter((p) => !scope || scope.has(p.id)).map((p) => {
+    if (!scope) return p;
+    const rows = scope.get(p.id)!;
+    return { ...p, documents: rows.filter((r) => r.revisionId).length, approved: rows.filter((r) => r.status === "approved").length, missing: rows.filter((r) => r.status === "missing").length, pendingReviews: 0, openDependencies: 0, packages: [] };
+  });
   const register = searchParams.view === "register";
   return (
     <Page>

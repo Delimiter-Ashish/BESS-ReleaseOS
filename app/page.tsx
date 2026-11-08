@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ago, DocStatusPill, MetricTile, Page, ReadinessPill, SeverityDot, SyntheticNote } from "@/components/kit";
+import ExternalToday from "@/components/today/ExternalToday";
 import { getSession } from "@/lib/auth";
 import { guardianPortfolio } from "@/lib/guardian-view";
 import { pkgLabel } from "@/lib/labels";
@@ -14,6 +15,8 @@ function greeting() {
 
 export default async function Today() {
   const s = getSession();
+  // Supplier / facility / AHJ / public: only records shared with them by the access policy (no portfolio data at all).
+  if (s.role !== "eqore") return <ExternalToday s={s} />;
   const m = todayMetrics();
   const all = findings(s);
   const guardian = await guardianPortfolio();
@@ -28,6 +31,7 @@ export default async function Today() {
   const toConfirm = all.filter((f) => f.lifecycle === "needs_confirmation").length;
   const engineer = s.engineer;
   const runHref = hero ? `/guardian?project=${hero.projectId}&template=${hero.templateId}&run=1` : "/guardian";
+  const prepareHref = hero ? `/submissions?project=${hero.projectId}&package=${hero.templateId}` : "/submissions";
 
   return (
     <Page>
@@ -39,7 +43,7 @@ export default async function Today() {
         </div>
         <div className="flex flex-wrap gap-2">
           {engineer ? <Link href="/reviews" className="btn-primary">Open assigned reviews</Link> : <Link href="/inbox" className="btn-ghost">Import documents</Link>}
-          <Link href="/submissions" className="btn-ghost">{engineer ? "Release signoff" : "Submission Studio"}</Link>
+          {engineer && <Link href="/submissions?view=signoff" className="btn-ghost">Release signoff</Link>}
         </div>
       </section>
 
@@ -49,25 +53,29 @@ export default async function Today() {
         <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:32px_32px]" />
         <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#67e8f9]">Project Guardian</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#67e8f9]">Selected submission{hero ? ` · ${hero.projectName} · ${pkgLabel(hero.templateId, hero.templateName)}` : ""}</div>
             <h2 className="mt-2 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">What are we forgetting before our next submission?</h2>
             <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
               Guardian checks every document, revision, engineering dependency and confirmed AHJ requirement for a package — and tells you exactly what is missing, why it matters, where the evidence is and who needs to act.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <Link href={runHref} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-[#67e8f9] to-[#2dd4bf] px-5 py-3 text-sm font-semibold text-night-950 shadow-[0_10px_30px_-10px_rgba(34,211,238,0.8)] transition hover:brightness-110">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z" /></svg>
+              <Link href={prepareHref} data-testid="cta-prepare" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-[#67e8f9] to-[#2dd4bf] px-5 py-3 text-sm font-semibold text-night-950 shadow-[0_10px_30px_-10px_rgba(34,211,238,0.8)] transition hover:brightness-110">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 3l8 4-8 4-8-4 8-4zM4 12l8 4 8-4M4 17l8 4 8-4" /></svg>
+                Prepare Submission
+              </Link>
+              <Link href={runHref} data-testid="cta-guardian" className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-ink ring-1 ring-inset ring-[rgba(85,221,229,0.4)] transition hover:bg-[rgba(85,221,229,0.08)]">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z" /></svg>
                 Run Project Guardian
               </Link>
-              <Link href="/memory" className="rounded-xl px-4 py-3 text-sm font-medium text-ink-soft ring-1 ring-inset ring-[rgba(148,163,184,0.25)] transition hover:bg-[rgba(255,255,255,0.05)] hover:text-ink">Open Action Center</Link>
+              <Link href="/memory" className="px-2 py-3 text-sm text-ink-muted transition hover:text-ink">Action Center →</Link>
             </div>
-            {hero && <div className="mt-3 text-xs text-ink-muted">Runs the server preflight for {hero.projectName} · {pkgLabel(hero.templateId, hero.templateName)}. Results come from the release gate — nothing is precomputed or simulated.</div>}
+            {hero && <div className="mt-3 text-xs text-ink-muted">Blockers here are this package&apos;s release gate only. {hero.canBuild && m.missingNow > 0 ? `It is ready even though ${m.missingNow} lifecycle document(s) elsewhere in the portfolio are missing — those belong to other stages or packages and do not block it.` : "Results come from the server preflight — nothing is precomputed or simulated."}</div>}
           </div>
           <div className="grid grid-cols-3 gap-3 lg:w-[380px]">
             {[
               { v: hero?.blockers ?? 0, l: `${(hero?.blockers ?? 0) === 1 ? "blocker" : "blockers"}${hero ? ` · ${pkgLabel(hero.templateId)}` : ""}`, c: (hero?.blockers ?? 0) ? "text-[#fca5a5]" : "text-[#5eead4]" },
-              { v: openActions, l: "open actions", c: "text-[#fde68a]" },
-              { v: toConfirm, l: "to confirm", c: "text-[#67e8f9]" },
+              { v: openActions, l: "open actions · portfolio", c: "text-[#fde68a]" },
+              { v: toConfirm, l: "to confirm · portfolio", c: "text-[#67e8f9]" },
             ].map((x) => (
               <div key={x.l} className="rounded-2xl bg-[rgba(255,255,255,0.04)] p-3 ring-1 ring-inset ring-[rgba(148,163,184,0.14)]">
                 <div className={`text-3xl font-semibold tabular-nums ${x.c}`}>{x.v}</div>
@@ -78,6 +86,10 @@ export default async function Today() {
         </div>
       </section>
 
+      <div className="-mb-3 flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-slate-900">Across the portfolio lifecycle</h2>
+        <span className="text-[11px] text-slate-500">All projects, all stages — not the selected submission</span>
+      </div>
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <MetricTile label="Missing now" value={m.missingNow} sub="for each project's current stage" href="/projects?view=register&status=missing" tone={m.missingNow ? "red" : "green"}
           how={<>Unique (project, document type) pairs that apply at the project&apos;s current or earlier stage — or are required by one of its current packages — with no revision on file. A document needed by two packages counts once.</>} />

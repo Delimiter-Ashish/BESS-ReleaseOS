@@ -4,6 +4,7 @@ import { Page, PageHeader, SectionTitle, SyntheticNote, Term, Restricted } from 
 import DocumentRegister from "@/components/projects/DocumentRegister";
 import { getSession } from "@/lib/auth";
 import { isInternal, registerFor } from "@/lib/view-access";
+import EnergyPath from "@/components/lifecycle/EnergyPath";
 import { customerOf, partiesFor } from "@/lib/demo-data";
 import { PACKAGE_BLURB, pkgLabel, SECTION, STATE_NAME } from "@/lib/labels";
 import { PACKAGE_TEMPLATES, STAGES, stageIndex } from "@/lib/requirements";
@@ -18,6 +19,7 @@ export default function Project({ params, searchParams }: { params: { id: string
   const s = getSession();
   if (s.role === "public") return <Restricted what="Project details" role={s.role} />;
   const internal = isInternal(s);
+  if (!internal && registerFor(s, site, documentRegister(site.id)).length === 0) return <Restricted what="This project" role={s.role} />;
   const p = projectSummaries().find((x) => x.id === site.id)!;
   const rows = registerFor(s, site, documentRegister(site.id));
   const customer = customerOf(site.id)?.replace(/ \(fictional\)$/, "") ?? site.name;
@@ -91,7 +93,11 @@ export default function Project({ params, searchParams }: { params: { id: string
       <section>
         <SectionTitle eyebrow="Lifecycle" title={SECTION.lifecycle}>The full deployment, from contract to decommissioning. Each stage shows only that stage&apos;s documents.</SectionTitle>
         <div className="card p-4">
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-11">
+          <EnergyPath current={p.stageIndex} stages={STAGES.map((st, i) => {
+            const bad = rows.filter((r) => r.stage === st.id && (r.status === "missing" || r.status === "outdated")).length;
+            return { id: st.id, short: st.short, label: st.label, attention: i <= p.stageIndex ? bad : 0, attentionLabel: bad ? `${bad} missing or outdated document(s)` : undefined };
+          })} />
+          <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-11">
             {STAGES.map((st, i) => {
               const stRows = rows.filter((r) => r.stage === st.id);
               const n = (k: string) => stRows.filter((r) => r.status === k).length;
@@ -122,6 +128,7 @@ export default function Project({ params, searchParams }: { params: { id: string
         </div>
       </section>
 
+      {internal && <>
       <section>
         <SectionTitle eyebrow="Checkpoints" title={SECTION.packages}>Readiness is decided by the backend release gate, including documents added by confirmed requirements from communications.</SectionTitle>
         <div className="grid gap-4 lg:grid-cols-3">
@@ -162,6 +169,8 @@ export default function Project({ params, searchParams }: { params: { id: string
           </div>
         </div>
       </div>
+
+      </>}
 
       <section id="register" className="scroll-mt-6">
         <SectionTitle title="Document register">Every document this project needs — including ones added by confirmed AHJ requirements — with its revision, status, provenance and owner.</SectionTitle>

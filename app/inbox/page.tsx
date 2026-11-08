@@ -1,19 +1,24 @@
 import Link from "next/link";
 import ImportCenter from "@/components/inbox/ImportCenter";
-import { ago, DocStatusPill, Page, PageHeader } from "@/components/kit";
+import { ago, DocStatusPill, Page, PageHeader, Restricted } from "@/components/kit";
 import { can, getSession } from "@/lib/auth";
 import { REQUIREMENTS, REQ_BY_ID, STAGES, stageIndex } from "@/lib/requirements";
 import { getSites } from "@/lib/store";
-import { revisionProvenance } from "@/lib/workspace";
+import { externalScope, isInternal } from "@/lib/view-access";
+import { documentRegister, revisionProvenance } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 export default function Inbox({ searchParams }: { searchParams: { project?: string; expect?: string } }) {
   const s = getSession();
-  const sites = getSites();
-  const project = sites.some((x) => x.id === searchParams.project) ? searchParams.project! : "S-1001";
+  if (!can(s, "upload")) return <Restricted what="The project inbox" role={s.role} />;
+  // Suppliers: only projects / document types shared with them, and only their own recent uploads.
+  const scope = isInternal(s) ? undefined : externalScope(s, getSites(), documentRegister);
+  const sites = scope ? scope.map((x) => x.site) : getSites();
+  const allowedTypes = scope ? new Set(scope.flatMap((x) => x.rows.map((r) => r.requirementId))) : undefined;
+  const project = sites.some((x) => x.id === searchParams.project) ? searchParams.project! : sites.find((x) => x.id === "S-1001")?.id ?? sites[0]?.id ?? "";
   const expect = searchParams.expect && REQ_BY_ID[searchParams.expect] ? searchParams.expect : undefined;
-  const recent = sites.flatMap((site) => site.documents.map((d) => ({ d, site }))).sort((a, b) => (a.d.uploadedAt < b.d.uploadedAt ? 1 : -1)).slice(0, 10);
+  const recent = sites.flatMap((site) => site.documents.filter((d) => !scope || d.uploadedById === s.userId).map((d) => ({ d, site }))).sort((a, b) => (a.d.uploadedAt < b.d.uploadedAt ? 1 : -1)).slice(0, 10);
   return (
     <Page>
       <PageHeader eyebrow="Project Inbox" title="Import documents & communications" subtitle="Select project → upload → validate → extract → classify → compare → create review tasks → project updated. Each file runs independently: a pending engineer review never blocks the next upload." />
@@ -21,7 +26,7 @@ export default function Inbox({ searchParams }: { searchParams: { project?: stri
         <ImportCenter
           projects={sites.map((x) => ({ id: x.id, name: x.name, stage: STAGES[stageIndex(x.stage)].label }))}
           defaultProject={project} expect={expect} canUpload={can(s, "upload")} userName={s.name}
-          requirements={REQUIREMENTS.map((r) => ({ id: r.id, name: r.name }))}
+          requirements={REQUIREMENTS.filter((r) => !allowedTypes || allowedTypes.has(r.id)).map((r) => ({ id: r.id, name: r.name }))}
         />
         <aside className="space-y-4">
           <div className="card p-4">

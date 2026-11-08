@@ -169,8 +169,8 @@ try {
   const pub = (await call(`/sites/${H}`)).body.toString();
   const signed = (await call(`/sites/${H}`, { cookie: pm })).body.toString();
   assert.ok(signed.includes("pending engineer review") && !pub.includes("pending engineer review"));
-  assert.match(pub, /sign in to view details/);
-  ok("public site page shows blocker counts only (“sign in to view details”); signed-in page shows descriptions");
+  assert.match(pub, /data-testid="restricted"/);
+  ok("signed-out visitors are redirected to a restricted page (no blocker details); EQORE page shows descriptions");
 
   // 10. Historical release unchanged (and survives a restart with the generated package)
   await stop(); await start();

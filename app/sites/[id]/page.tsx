@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import QRCode from "qrcode";
 import { AppHeader } from "@/components/AppHeader";
 import BuildRelease from "@/components/BuildRelease";
@@ -37,6 +37,8 @@ export default async function SitePage({ params }: { params: { id: string } }) {
   const session = getSession();
   const canReview = can(session, "review");
   // Blocker descriptions, review details, engineering tasks and decision notes are internal: signed-in users only.
+  // External roles use the policy-filtered project page (this legacy workspace shows the full internal register).
+  if (session.role !== "eqore") redirect(`/projects/${encodeURIComponent(site.id)}`);
   const signedIn = session.role === "eqore"; // internal review/audit detail: EQORE only (other roles see counts)
   const ev = evaluateSite(site);
   const si = stageIndex(site.stage);

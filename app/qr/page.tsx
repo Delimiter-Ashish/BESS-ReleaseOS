@@ -5,12 +5,15 @@ import { Page, PageHeader, SyntheticNote } from "@/components/kit";
 import { getSession } from "@/lib/auth";
 import { publicEmergency } from "@/lib/lifecycle/ops";
 import { getSites } from "@/lib/store";
+import { externalScope, isInternal } from "@/lib/view-access";
+import { documentRegister } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 /** Emergency Access / Site QR (signed-in users): each code opens the public first-responder page (/p/:id), which shows only engineer-published documents. */
 export default async function QrAccess() {
-  if (getSession().role === "public") {
+  const session = getSession();
+  if (session.role === "public") {
     return (
       <Page>
         <PageHeader eyebrow="Records" title="Emergency Access / Site QR" subtitle="Sign in to manage site QR codes. First responders: scan the code on the enclosure to open the site's published emergency information." />
@@ -19,7 +22,8 @@ export default async function QrAccess() {
   }
   const h = headers();
   const host = process.env.PUBLIC_BASE_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
-  const sites = getSites();
+  // EQORE: every site. Other roles: only projects shared with them by the access policy.
+  const sites = isInternal(session) ? getSites() : externalScope(session, getSites(), documentRegister).map((x) => x.site);
   const codes = await Promise.all(sites.map(async (s) => ({ s, live: (publicEmergency(s.id)?.publications ?? []).filter((p) => p.current), url: `${host}/p/${s.id}`, img: await QRCode.toDataURL(`${host}/p/${s.id}`, { margin: 1, width: 240, color: { dark: "#060912", light: "#ffffff" } }) })));
   return (
     <Page>

@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { LifecycleView, ObligationStatus, ObligationView, SiteChange } from "@/lib/lifecycle/types";
+import { STAGES as STAGE_META } from "@/lib/requirements";
+import EnergyPath from "./EnergyPath";
 
 const STATUS: Record<ObligationStatus, { label: string; cls: string }> = {
   overdue: { label: "Overdue", cls: "bg-red-50 text-red-700 ring-red-200" },
@@ -76,6 +78,10 @@ export default function Lifecycle({ siteId, isEqore, isEngineer, canRecord }: { 
             )}
           </div>
         </div>
+        <EnergyPath compact current={STAGE_META.findIndex((x) => x.id === v.stage)} stages={STAGE_META.map((st) => {
+          const k = v.obligations.filter((o) => o.stage === st.id && ["overdue", "due_soon", "needs_review"].includes(o.status)).length;
+          return { id: st.id, short: st.short, label: st.label, attention: k, attentionLabel: k ? `${k} obligation(s) overdue, due soon or needing review` : undefined };
+        })} />
         <div className="flex flex-wrap gap-2">
           {ORDER.map((s) => <span key={s} className={`pill ${STATUS[s].cls}`} data-testid={`count-${s}`}>{STATUS[s].label}: {v.counts[s]}</span>)}
         </div>

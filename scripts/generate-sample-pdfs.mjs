@@ -263,3 +263,11 @@ await makePdf("SYNTHETIC_Emergency_Info_Sheet.pdf", "First-Responder Emergency I
   "Do not open battery enclosures. Stay upwind; treat smoke as toxic and flammable.",
   "24/7 response line: 555-0100 (fictional)",
 ]], "SYNTHETIC - FICTIONAL - DEMONSTRATION ONLY");
+await makePdf("SYNTHETIC_Emergency_Info_Sheet_RevB.pdf", "First-Responder Emergency Information Rev B", [[
+  "# First-responder emergency information (synthetic) - Rev B",
+  "Site: Century Tywood J3 Corp, 79 Lowland St, Holliston MA",
+  "BESS: lithium iron phosphate (LFP), outdoor pad, west side of building",
+  "Inverters: 2 x Northbridge NPI-125 (fictional) - updated after replacement",
+  "Disconnect: AC disconnect next to the main distribution panel",
+  "24/7 response line: 555-0100 (fictional)",
+]], "SYNTHETIC - FICTIONAL - DEMONSTRATION ONLY");

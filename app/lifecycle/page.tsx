@@ -3,13 +3,17 @@ import { Page, PageHeader, SyntheticNote } from "@/components/kit";
 import Lifecycle from "@/components/lifecycle/Lifecycle";
 import { getSession } from "@/lib/auth";
 import { getSites } from "@/lib/store";
+import { externalScope, isInternal } from "@/lib/view-access";
+import { documentRegister } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 /** Compliance lifecycle: obligations after submission (commissioning → operations → decommissioning). Data: GET/POST /api/sites/:id/lifecycle. */
 export default function LifecyclePage({ searchParams }: { searchParams: { project?: string } }) {
   const s = getSession();
-  const sites = getSites();
+  // EQORE: every site. Other roles: only projects shared with them. Signed-out: no project data at all.
+  const sites = s.role === "public" ? [] : isInternal(s) ? getSites() : externalScope(s, getSites(), documentRegister).map((x) => x.site);
+  if (!sites.length) return <Page><PageHeader eyebrow="Lifecycle" title="Obligations & deadlines" subtitle={s.role === "public" ? "Sign in to view lifecycle obligations. First responders: scan the QR code on the enclosure." : "No project's lifecycle records are shared with your role."} /></Page>;
   const site = sites.find((x) => x.id === searchParams.project) ?? sites.find((x) => x.id === "S-1001") ?? sites[0];
   return (
     <Page>

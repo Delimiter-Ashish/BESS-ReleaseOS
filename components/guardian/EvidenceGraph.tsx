@@ -47,7 +47,7 @@ const short = (s: string, n = 16) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 export default function EvidenceGraph({ site, byRev, report, focusId, onFocus }: { site: { id: string; name: string }; byRev: RevisionEvidence; report?: PreflightReport; focusId?: string; onFocus: (id?: string) => void }) {
   const [res, setRes] = useState<ApiResult<Graph>>();
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"graph" | "list">("graph");
+  const [view, setView] = useState<"chain" | "graph" | "list">("chain");
   const [q, setQ] = useState("");
   const [zoom, setZoom] = useState(1);
 
@@ -99,7 +99,7 @@ export default function EvidenceGraph({ site, byRev, report, focusId, onFocus }:
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex overflow-hidden rounded-lg border border-slate-300 text-xs">
-          {(["graph", "list"] as const).map((v) => <button key={v} type="button" onClick={() => setView(v)} className={`px-3 py-1.5 ${view === v ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{v === "graph" ? "Graph" : "Plain-language list"}</button>)}
+          {(["chain", "graph", "list"] as const).map((v) => <button key={v} type="button" onClick={() => setView(v)} data-testid={`graph-view-${v}`} className={`px-3 py-1.5 ${view === v ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{v === "chain" ? "Focused chain" : v === "graph" ? "Full graph" : "Plain-language list"}</button>)}
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a node…" className="min-w-[160px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm sm:flex-none" aria-label="Search graph nodes" />
         <div className="flex flex-wrap gap-1">
@@ -114,7 +114,9 @@ export default function EvidenceGraph({ site, byRev, report, focusId, onFocus }:
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        {view === "graph" ? (
+        {view === "chain" ? (
+          <ChainView g={g} focusId={focusId} onFocus={onFocus} />
+        ) : view === "graph" ? (
           <div className="card relative overflow-auto bg-night-900/80" style={{ maxHeight: 640 }}>
             <svg width={layout.width * zoom} height={layout.height * zoom} viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label={`Evidence graph for ${site.name}: ${g.nodes.length} records, ${g.edges.length} connections`} onClick={() => onFocus(undefined)}>
               <defs>
@@ -270,6 +272,71 @@ function PlainList({ g, focusId, onFocus, q }: { g: Graph; focusId?: string; onF
         ))}
         {edges.length === 0 && <li className="p-6 text-center text-sm text-slate-500">No connections match.</li>}
       </ul>
+    </div>
+  );
+}
+
+
+/**
+ * Focused evidence chain (default view). Built from the REAL graph: start at the selected record (or the first confirmed,
+ * blocking requirement), run the same BFS as the full graph, and keep the nearest record per lane in information-flow
+ * order. Nothing is inferred; a lane with no record is shown as an explicit gap only where the chain needs one.
+ */
+function ChainView({ g, focusId, onFocus }: { g: Graph; focusId?: string; onFocus: (id?: string) => void }) {
+  const nodes = new Map(g.nodes.map((n) => [n.id, n]));
+  const reqs = g.nodes.filter((n) => n.type === "memory_item" && /confirmed|resolved/.test(String(n.data?.status)) && g.edges.some((e) => e.type === "requires_document" && e.from === n.id));
+  const fallback = reqs.find((n) => n.data?.blocking) ?? reqs[0] ?? g.nodes.find((n) => n.type === "finding") ?? g.nodes.find((n) => n.type === "engineering_task");
+  const start = focusId && nodes.has(focusId) ? nodes.get(focusId)! : fallback;
+  if (!start) return <div className="card p-6 text-sm text-slate-500">No requirement or finding to start a chain from. Use the full graph.</div>;
+  const tr = traverse(g, start.id, { skip: (n) => n.type === "fact" || n.type === "observation" });
+  const reach = new Map<string, Reach>([...tr.upstream, ...tr.downstream].map((r) => [r.id, r]));
+  const SKIP = new Set(["facts", "obligations"]);
+  const steps: { lane: string; node?: GraphNode; via?: Reach; gap?: string }[] = [];
+  for (const lane of LANES) {
+    if (SKIP.has(lane.id)) continue;
+    if (lane.types.includes(start.type)) { steps.push({ lane: lane.label, node: start }); continue; }
+    const best = Array.from(reach.values()).filter((r) => lane.types.includes(nodes.get(r.id)!.type))
+      .sort((a, b) => a.depth - b.depth || String(nodes.get(b.id)!.at ?? "").localeCompare(String(nodes.get(a.id)!.at ?? "")))[0];
+    if (best) steps.push({ lane: lane.label, node: nodes.get(best.id), via: best });
+    else if (lane.id === "revs" && start.type === "memory_item") steps.push({ lane: lane.label, gap: "No revision on file — the required document is missing" });
+  }
+  return (
+    <div className="card space-y-4 bg-night-900/80 p-4" data-testid="evidence-chain">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500">Chain from</span>
+        {reqs.slice(0, 4).map((n) => <button key={n.id} type="button" onClick={() => onFocus(n.id)} className={`rounded-full px-2.5 py-1 ring-1 ring-inset ${n.id === start.id ? "bg-[rgba(85,221,229,0.12)] text-[#a5f3fc] ring-[rgba(85,221,229,0.45)]" : "text-slate-600 ring-slate-300 hover:bg-slate-100"}`}>{n.label.replace(/^requirement: /i, "")}</button>)}
+        {!reqs.some((n) => n.id === start.id) && <span className="rounded-full bg-[rgba(85,221,229,0.12)] px-2.5 py-1 text-[#a5f3fc] ring-1 ring-inset ring-[rgba(85,221,229,0.45)]">{start.label}</span>}
+      </div>
+      <ol className="flex flex-col gap-1 pb-1 lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-y-3">
+        {steps.map((st, i) => {
+          const n = st.node;
+          const style = n ? TYPE_STYLE[n.type] ?? TYPE_STYLE.document_family : undefined;
+          const isFocus = n && n.id === (focusId ?? start.id);
+          return (
+            <li key={st.lane + i} className="ros-rise flex min-w-0 flex-col lg:w-[218px] lg:shrink-0 lg:flex-row" style={{ animationDelay: `${i * 70}ms` }}>
+              <div className="flex min-w-0 flex-1 items-stretch lg:flex-row">
+                {n ? (
+                  <button type="button" onClick={() => onFocus(n.id)} data-testid="chain-step"
+                    className={`min-w-0 flex-1 rounded-xl p-3 text-left ring-1 ring-inset transition hover:-translate-y-0.5 ${isFocus ? "bg-[rgba(85,221,229,0.08)] ring-[rgba(85,221,229,0.6)]" : "bg-[rgba(255,255,255,0.03)] ring-[rgba(148,163,184,0.18)] hover:ring-[rgba(85,221,229,0.4)]"}`}>
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: style!.stroke }}><span>{style!.glyph(n)}</span>{style!.name}</div>
+                    <div className="mt-1 line-clamp-3 text-[13px] font-medium leading-snug text-ink [overflow-wrap:anywhere]" title={n.label}>{n.label.replace(/^(requirement|decision|action item|question): /i, "")}</div>
+                    {n.data?.status ? <div className="mt-1 text-[10px] uppercase tracking-wide text-ink-muted">{String(n.data.status).replace(/_/g, " ")}</div> : null}
+                    {st.via?.via.evidence && <div className="mt-1.5 line-clamp-3 border-l-2 border-[#F1B56A] pl-2 text-[11px] italic text-ink-soft">“{st.via.via.evidence}”</div>}
+                    {st.via && <div className="mt-1 line-clamp-2 text-[10px] text-ink-muted">{st.via.via.reason}</div>}
+                  </button>
+                ) : (
+                  <div className="min-w-0 flex-1 rounded-xl border border-dashed border-[rgba(241,181,106,0.6)] p-3 text-left" data-testid="chain-gap">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#F1B56A]">{st.lane} · gap</div>
+                    <div className="mt-1 text-[13px] font-medium text-[#fde68a]">{st.gap}</div>
+                  </div>
+                )}
+              </div>
+              {i < steps.length - 1 && <div aria-hidden className="grid place-items-center px-1 py-0.5 text-[#55DDE5] lg:py-0"><span className="rotate-90 lg:rotate-0">→</span></div>}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="text-[11px] text-slate-500">Each step is the nearest connected record in the server&apos;s evidence graph ({g.nodes.length} records, {g.edges.length} connections). Click a step for its source and evidence; switch to the full graph for everything else.</p>
     </div>
   );
 }

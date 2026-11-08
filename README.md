@@ -254,6 +254,29 @@ BASE=http://localhost:3000 npm run e2e:assurance   # Kaushik's UI-workflow check
 BASE=http://localhost:3000 npm run e2e:studio-ui   # Kaushik's Guardian → Studio UI checks (34)
 ```
 
+## Demo & recording (reproducible, isolated)
+
+The demo runs on its **own server and data directory**, so the main `.data` (and any sealed R2 there) is never touched.
+
+```bash
+npm run build
+npm run demo:start     # http://localhost:3200, data in ./.data-demo (gitignored)
+npm run demo:setup     # reset the DEMO server + start state via real API calls (refuses to run against :3000)
+npm run demo:verify    # asserts the start state, or the end state after the walkthrough
+npm run demo:advance   # optional: perform the resolution steps by API (rehearsal / fallback)
+```
+
+**Start state** after `demo:setup`:
+- An AHJ email was imported (OpenAI when configured) and the ventilation-plan requirement confirmed as blocking.
+- Switchgear Rev B is awaiting engineer review, with a dependency review open on the plan set.
+- The emergency information sheet is published to `/p/S-1001`.
+- A synthetic maintenance record is due in 5 days.
+- Time Machine shows R1 vs current with real changes.
+
+Run `demo:setup` again for a clean take.
+
+The **intro** (`/intro`) is a skippable 4-second brand reveal. It is never auto-played over the app.
+
 ## Persistence
 
 Every mutation writes `RELEASEOS_DATA_DIR/state.json` atomically (default `./.data`, git-ignored); uploaded bytes

@@ -18,3 +18,8 @@ export function registerFor(s: Pick<Session, "role" | "engineer">, site: Site, r
     .filter((r) => ruleFor(site, r.requirementId).view.some((a) => aud.includes(a)))
     .map((r) => (r.status === "missing" ? { ...r, evidence: undefined, reason: "Required — not yet on file" } : r));
 }
+
+/** Sites a non-EQORE role can see at least one document type on, with the policy-filtered register for each. */
+export function externalScope(s: Pick<Session, "role" | "engineer">, sites: Site[], registerOf: (siteId: string) => RegisterRow[]) {
+  return sites.map((site) => ({ site, rows: registerFor(s, site, registerOf(site.id)) })).filter((x) => x.rows.length > 0);
+}

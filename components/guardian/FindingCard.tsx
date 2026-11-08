@@ -11,7 +11,7 @@ const SEV = {
 } as const;
 
 const CLASS_LABEL: Record<string, string> = {
-  verified_discrepancy: "Verified discrepancy", potential_inconsistency: "Potential inconsistency", explained_difference: "Explained difference",
+  verified_discrepancy: "Verified discrepancy", needs_clarification: "Needs engineering clarification", potential_inconsistency: "Potential inconsistency", explained_difference: "Explained difference",
   consistent: "Consistent", insufficient_evidence: "Insufficient evidence",
 };
 

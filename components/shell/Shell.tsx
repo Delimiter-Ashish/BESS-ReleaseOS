@@ -117,7 +117,7 @@ export default function Shell({ session, users, ai, badges, children }: ShellPro
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   // Public first-responder QR view stays unbranded and outside the workspace.
-  if (path.startsWith("/p/")) return <>{children}</>;
+  if (path.startsWith("/p/") || path === "/intro") return <>{children}</>;
   const groups = navFor(session);
   const roleLabel = session.role === "eqore" ? (session.engineer ? "Engineer workspace" : "Project manager workspace") : session.role === "public" ? "Public" : `${session.role.toUpperCase()} view`;
   const nav = (

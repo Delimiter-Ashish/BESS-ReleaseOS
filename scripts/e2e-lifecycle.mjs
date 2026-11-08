@@ -186,12 +186,28 @@ try {
   const pubFile = await call(pub.publications[0].href);
   assert.equal(pubFile.status, 200);
   assert.equal(sha(pubFile.body), pub.publications[0].sha256);
+  // Unpublished stays hidden; superseded is withheld; withdrawn disappears.
+  assert.ok(!pub.publications.some((x) => /Emergency operations plan/.test(x.title)), "unpublished EOP is not public");
+  const sheetB = await upload(pm, "SYNTHETIC_Emergency_Info_Sheet_RevB.pdf", "emergency_info_sheet", "2026-11-07");
+  await must(call(`/api/reviews/${sheetB.review.id}`, { cookie: eng2, method: "POST", json: { decision: "approve", note: "Sheet Rev B reviewed (synthetic)" } }));
+  const afterSupersede = await must(call(`/api/public/sites/${H}/emergency`));
+  assert.equal(afterSupersede.publications[0].current, false, "superseded publication is no longer current");
+  assert.equal((await call(pub.publications[0].href)).status, 410, "superseded document is withheld publicly");
+  assert.ok(!(await call(`/p/${H}`)).body.toString().includes("Rev A</a>"), "public page no longer links the superseded revision");
+  const pubB = await must(act(eng, { action: "publish_emergency", revisionId: sheetB.revision.id, note: "Rev B approved for first responders (synthetic)" }));
+  await must(act(pm, { action: "withdraw_emergency", publicationId: pubB.publication.id, note: "Withdrawn to test revocation (synthetic)" }));
+  assert.equal((await must(call(`/api/public/sites/${H}/emergency`))).publications.filter((x) => x.current).length, 0, "withdrawn publication is not public");
+  assert.equal((await call(`/api/public/sites/${H}/emergency/${pubB.publication.id}`)).status, 404, "withdrawn document download refused");
+  const pubB2 = await must(act(eng, { action: "publish_emergency", revisionId: sheetB.revision.id, note: "Re-published Rev B (synthetic)" }));
+  pub = await must(call(`/api/public/sites/${H}/emergency`));
+  assert.ok(pub.publications.some((x) => x.id === pubB2.publication.id && x.current));
+  pub = { ...pub, publications: pub.publications.filter((x) => x.current) };
   const ePage = (await call(`/e/${H}`)).body.toString();
   assert.ok(ePage.includes("First-responder emergency information sheet") && !/work order|Patel|Chen|Rivera|Emergency operations plan Rev/.test(ePage));
   const pPage = (await call(`/p/${H}`)).body.toString();
   assert.ok(!/work order|Confirmed against|Fire comment|NPI-125/.test(pPage), "legacy QR page leaks no notes, quotes or change details");
   assert.equal((await call(`/api/sites/${H}/graph`)).status, 401);
-  ok("facility reads EOP Rev B (200); supplier/AHJ/public denied (403/401); facility view restricted; supplier sees no ops records; QR page empty until an engineer publishes (PM 403); published sheet served with matching sha256; public pages carry no notes, names or change details");
+  ok("facility reads EOP Rev B (200); supplier/AHJ/public denied (403/401); facility view restricted; supplier sees no ops records; QR page empty until an engineer publishes (PM 403); published sheet served with matching sha256; public pages carry no notes, names or change details; unpublished EOP hidden; superseded Rev A withheld (410); withdrawn Rev B removed (404); re-published Rev B live");
 
   // 14. Restart persistence.
   const before = await lc(pm);
