@@ -1,3 +1,5 @@
+import { PDF_SAFE_OPTIONS } from "./pdf-options";
+
 // Untrusted-file handling: type sniffing, limits, and PDF text-layer extraction.
 export const LIMITS = {
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 15) * 1024 * 1024,
@@ -35,7 +37,7 @@ export async function readTextLayer(media: AllowedMedia, bytes: Buffer): Promise
   }
   if (media !== "application/pdf") return { pages: [], pageCount: 1, joined: "", hasText: false };
   const { extractText, getDocumentProxy } = await import("unpdf");
-  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), { ...PDF_SAFE_OPTIONS, isOffscreenCanvasSupported: false });
   if (pdf.numPages > LIMITS.maxPdfPages) throw new UploadError(413, `PDF has ${pdf.numPages} pages; the limit is ${LIMITS.maxPdfPages}.`);
   const { text } = await extractText(pdf, { mergePages: false });
   const pages = (text as string[]).map((t) => t ?? "");

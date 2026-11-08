@@ -9,7 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Cross-source evidence graph: GET [?focus=<nodeId>&depth=2]. EQORE users only. */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
     requireCap(req, "memory");
     const site = getSite(params.id);

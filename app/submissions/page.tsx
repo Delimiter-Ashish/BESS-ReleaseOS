@@ -10,8 +10,9 @@ import { documentRegister, evidenceForRevision, projectSummaries, readiness, rel
 
 export const dynamic = "force-dynamic";
 
-export default function Submissions({ searchParams }: { searchParams: { project?: string; package?: string; status?: string; view?: string } }) {
-  const s = getSession();
+export default async function Submissions({ searchParams: searchParamsPromise }: { searchParams: Promise<{ project?: string; package?: string; status?: string; view?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const s = await getSession();
   if (s.role !== "eqore") return <Restricted what="Submission Studio" role={s.role} />;
   const sites = getSites();
   const portfolio = projectSummaries().flatMap((p) => p.packages.map((k) => ({ ...k, projectId: p.id, projectName: p.name })));

@@ -31,10 +31,11 @@ const REL_META = {
 } as const;
 const name = (rid: string) => REQ_BY_ID[rid]?.name ?? rid;
 
-export default async function SitePage({ params }: { params: { id: string } }) {
+export default async function SitePage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const site = getSite(params.id);
   if (!site) notFound();
-  const session = getSession();
+  const session = await getSession();
   const canReview = can(session, "review");
   // Blocker descriptions, review details, engineering tasks and decision notes are internal: signed-in users only.
   // External roles use the policy-filtered project page (this legacy workspace shows the full internal register).
@@ -44,7 +45,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
   const si = stageIndex(site.stage);
   const releases = getReleases(site.id);
 
-  const h = headers();
+  const h = await headers();
   const host = process.env.PUBLIC_BASE_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const qrUrl = `${host}/p/${site.id}`;
   const qr = await QRCode.toDataURL(qrUrl, { margin: 1, width: 220 });

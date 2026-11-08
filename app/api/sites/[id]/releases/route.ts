@@ -9,23 +9,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Readiness for every package (deterministic gate + optimistic token). */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
-    const session = requireCap(req, "read_private");
+    requireCap(req, "memory"); // readiness includes internal engineering and communication details
     const site = getSite(params.id);
     if (!site) throw new StoreError(404, "site not found");
     return NextResponse.json({
       ok: true,
       packages: PACKAGE_TEMPLATES.map((t) => {
         const r = packageReadiness(site, t);
-        return { templateId: t.id, name: t.name, canBuild: r.canBuild, token: r.token, issues: session.role === "eqore" ? r.issues : r.issues.map((i) => (i.source ? { ...i, source: { ...i.source, evidence: undefined } } : i)), advisories: r.advisories, items: r.items.map((i) => ({ requirementId: i.requirementId, name: i.name, state: i.state, approved: i.approved?.revLabel ?? null, pending: i.pending?.revLabel ?? null, openTasks: i.tasks.map((t) => t.id) })) };
+        return { templateId: t.id, name: t.name, canBuild: r.canBuild, token: r.token, issues: r.issues, advisories: r.advisories, items: r.items.map((i) => ({ requirementId: i.requirementId, name: i.name, state: i.state, approved: i.approved?.revLabel ?? null, pending: i.pending?.revLabel ?? null, openTasks: i.tasks.map((t) => t.id) })) };
       }),
     });
   });
 }
 
 /** Build a frozen, version-locked release: { templateId, note, readinessToken }. Engineer signoff from session. */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     const session = requireCap(req, "release");
     const b = await jsonBody(req);

@@ -11,7 +11,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Imported communications for a site (EQORE only: internal correspondence). */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
     requireCap(req, "memory");
     return NextResponse.json({ ok: true, communications: getMemory(params.id).communications });
@@ -23,7 +24,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
  * Missing sender/date/subject are read from the email's own header block. The original text is stored verbatim.
  * Re-importing the same text returns the existing record (duplicate: true) without a second AI call.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     const session = requireCap(req, "memory");
     const site = getSite(params.id);

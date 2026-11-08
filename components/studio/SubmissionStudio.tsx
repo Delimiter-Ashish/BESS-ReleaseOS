@@ -149,12 +149,12 @@ export default function SubmissionStudio(props: {
             </li>
           );
         })}
-        <span className="ml-auto flex items-center gap-2"><ReadinessPill s={rd.status} /><span className="text-slate-500">{props.templateLabel} · {site.name}</span></span>
+        <span className="ml-auto flex min-w-0 flex-wrap items-center gap-2"><ReadinessPill s={rd.status} /><span className="text-slate-500">{props.templateLabel} · {site.name}</span></span>
       </ol>
 
       {/* A. Choose */}
       <Section id="step-0" letter="A" title="Choose the submission">
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <label className="text-xs text-slate-500">Project
             <select value={site.id} onChange={(e) => router.push(`/submissions?project=${e.target.value}`)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900">
               {props.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -216,15 +216,15 @@ export default function SubmissionStudio(props: {
 
       {/* C. Arrange */}
       <Section id="step-2" letter="C" title="Arrange the package" hint={`Drag to reorder, use the arrows, and choose which combined PDF each document goes into. ${draftAt ? `Draft saved in this browser ${new Date(draftAt).toLocaleTimeString()}.` : ""}`}>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
             {groupNames.map((gname, gi) => {
               const items = selected.map((d, i) => ({ d, i })).filter(({ d }) => gOf(d.requirementId) === gi);
               return (
                 <div key={gi}>
-                  <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     <span>PDF {gi + 1}</span>
-                    <input value={gname} onChange={(e) => setGroupNames((g) => g.map((x, k) => (k === gi ? e.target.value.slice(0, 80) : x)))} aria-label={`Name of PDF ${gi + 1}`} className="rounded border border-slate-200 bg-transparent px-1.5 py-0.5 text-[11px] normal-case tracking-normal text-slate-700" />
+                    <input value={gname} onChange={(e) => setGroupNames((g) => g.map((x, k) => (k === gi ? e.target.value.slice(0, 80) : x)))} aria-label={`Name of PDF ${gi + 1}`} className="min-w-0 max-w-full rounded border border-slate-200 bg-transparent px-1.5 py-0.5 text-[11px] normal-case tracking-normal text-slate-700" />
                     <span className="font-normal normal-case tracking-normal">{items.length} document(s){items.length === 0 ? " · no PDF will be produced" : ""}</span>
                     {groupNames.length > 1 && items.length === 0 && <button type="button" className="ml-auto text-[11px] font-normal normal-case text-slate-500 hover:underline" onClick={() => { setGroupNames((g) => g.filter((_, k) => k !== gi)); setGroupOf((m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v > gi ? v - 1 : v]))); }}>Remove</button>}
                   </div>
@@ -307,7 +307,7 @@ export default function SubmissionStudio(props: {
           </button>
           <span className="text-[11px] text-slate-500">The server merges the approved source PDFs in your order, verifies page counts and hashes, and seals the release. Nothing is shown as done until it answers.</span>
         </div>
-        {phase === "failed" && result && result.state !== "ok" && <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">The server did not seal the release: {result.error}. Nothing was created.</div>}
+        {phase === "failed" && result && result.state !== "ok" && <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">Generation could not be confirmed: {result.error}. Check release history before retrying.</div>}
         {rel && animDone && (
           <div className="ros-rise mt-4 rounded-2xl border border-[rgba(45,212,191,0.4)] bg-night-950 p-5">
             <div className="flex flex-wrap items-center gap-4">
@@ -398,7 +398,7 @@ function Issue({ i }: { i: StudioIssue }) {
   const blocker = i.severity === "blocker";
   return (
     <li className={`rounded-lg px-2 py-1.5 ${blocker ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`} data-testid={blocker ? "studio-blocker" : "studio-warning"}>
-      <div className="flex gap-2"><span>{blocker ? "✕" : "!"}</span><span className="font-medium">{i.message}</span><span className="ml-auto font-mono text-[10px] opacity-60">{i.code}</span></div>
+      <div className="flex flex-wrap gap-2"><span>{blocker ? "✕" : "!"}</span><span className="font-medium">{i.message}</span><span className="ml-auto font-mono text-[10px] opacity-60">{i.code}</span></div>
       {i.source?.label && <div className="pl-5 text-[11px] opacity-80">Source: {i.source.label}</div>}
       {i.evidence && <div className="pl-5 text-[11px] italic opacity-80">“{i.evidence}”</div>}
       <div className="pl-5 text-[11px]"><b>Fix:</b> {i.fix}{i.responsibleParty ? ` · ${i.responsibleParty}` : ""}</div>

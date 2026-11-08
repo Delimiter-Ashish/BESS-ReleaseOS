@@ -10,8 +10,9 @@ import { findings } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
-export default function Memory({ searchParams }: { searchParams: { project?: string; type?: string; item?: string } }) {
-  const s = getSession();
+export default async function Memory({ searchParams: searchParamsPromise }: { searchParams: Promise<{ project?: string; type?: string; item?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const s = await getSession();
   if (s.role !== "eqore") return <Restricted what="The Action Center" role={s.role} />;
   const sites = getSites();
   const project = sites.some((x) => x.id === searchParams.project) ? searchParams.project : undefined;

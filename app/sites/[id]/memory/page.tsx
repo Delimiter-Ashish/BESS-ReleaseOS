@@ -16,10 +16,11 @@ export const dynamic = "force-dynamic";
 const CAT_LABEL = { missing_document: "Missing documents", outdated_revision: "Outdated revisions", pending_review: "Pending reviews", dependency: "Engineering dependencies", consistency: "Cross-document discrepancies", requirement: "Confirmed requirements", action: "Stakeholder actions", question: "Open questions", decision: "Open decisions" } as const;
 const SRC_LABEL = { package_template: "Checklist", dependency_graph: "Dependency graph", project_memory: "Project memory", consistency_check: "Cross-document check" } as const;
 
-export default function MemoryPage({ params }: { params: { id: string } }) {
+export default async function MemoryPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const site = getSite(params.id);
   if (!site) notFound();
-  const session = getSession();
+  const session = await getSession();
   if (session.role !== "eqore") return <Restricted what="Project memory" role={session.role} />;
   const isEqore = can(session, "memory");
   const reports = PACKAGE_TEMPLATES.map((t) => preSubmissionReport(site, t.id, { redactEvidence: !isEqore })!);

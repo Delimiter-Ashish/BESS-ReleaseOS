@@ -1,3 +1,4 @@
+import { publicDemo, reserveAiCall } from "../resource-limits";
 // OpenAI provider (official SDK, Responses API, strict Structured Outputs). Server-only.
 import OpenAI from "openai";
 import type { FactChange } from "../types";
@@ -10,7 +11,7 @@ const TIMEOUT_MS = () => Number(process.env.OPENAI_TIMEOUT_MS || 90_000);
 function client() {
   if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set");
   // OPENAI_BASE_URL is honored by the SDK (used for the offline contract test).
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: TIMEOUT_MS(), maxRetries: 1 });
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: TIMEOUT_MS(), maxRetries: publicDemo() ? 0 : 1 });
 }
 
 function parseOutput(res: { status?: string | null; output_text?: string; incomplete_details?: { reason?: string } | null }) {
@@ -32,6 +33,7 @@ export async function openaiExtract(opts: { fileName: string; media: AllowedMedi
   else if (opts.media.startsWith("image/")) parts.push({ type: "input_image", image_url: `data:${opts.media};base64,${b64}`, detail: "high" });
   parts.push({ type: "input_text", text: userPrompt(opts.siteName, opts.siteFacts, opts.layer.hasText ? opts.layer.joined : undefined) });
 
+  reserveAiCall();
   const res = await client().responses.create({
     model: OPENAI_MODEL(),
     instructions: SYSTEM_INSTRUCTIONS,
@@ -49,6 +51,7 @@ export async function openaiExplain(input: { documentName: string; fromRev?: str
     detectedChanges: input.changes.map((c) => ({ key: c.key, label: c.label, before: c.before ?? null, after: c.after ?? null, normalizedBefore: c.normalizedBefore ?? null, normalizedAfter: c.normalizedAfter ?? null, evidenceBefore: c.evidenceBefore ?? null, evidenceAfter: c.evidenceAfter ?? null, pageAfter: c.pageAfter ?? null })),
     dependencyGraphDependents: input.dependents,
   };
+  reserveAiCall();
   const res = await client().responses.create({
     model: OPENAI_MODEL(),
     instructions: EXPLAIN_INSTRUCTIONS,
@@ -70,6 +73,7 @@ export async function openaiExplain(input: { documentName: string; fromRev?: str
 
 /** Communication intelligence (project memory). Text-only input; output is re-validated by groundCommunication. */
 export async function openaiAnalyzeCommunication(instructions: string, prompt: string, schema: Record<string, unknown>) {
+  reserveAiCall();
   const res = await client().responses.create({
     model: OPENAI_MODEL(),
     instructions,

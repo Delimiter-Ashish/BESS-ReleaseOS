@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * Blocking findings are exactly the release gate; AI reviews (ai=true) are advisory and never change gating.
  * EQORE users only (the report quotes internal communications).
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     requireCap(req, "memory");
     const site = getSite(params.id);

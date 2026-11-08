@@ -9,8 +9,9 @@ import { evidenceForRevision, readiness, relevantTemplates, type EvidenceRef } f
 
 export const dynamic = "force-dynamic";
 
-export default function GuardianPage({ searchParams }: { searchParams: { project?: string; template?: string; tab?: string; run?: string; focus?: string; release?: string } }) {
-  const s = getSession();
+export default async function GuardianPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ project?: string; template?: string; tab?: string; run?: string; focus?: string; release?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const s = await getSession();
   if (s.role !== "eqore") return <Restricted what="Project Guardian" role={s.role} />;
   const sites = getSites();
   const site = sites.find((x) => x.id === searchParams.project) ?? sites.find((x) => x.id === "S-1001")!;

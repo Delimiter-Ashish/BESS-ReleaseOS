@@ -8,7 +8,8 @@ import type { Revision } from "@/lib/types";
 export const runtime = "nodejs";
 
 /** Step 2 of intake: file the server-side extraction as a revision IN REVIEW. Client hashes/facts are never accepted. */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     const session = requireCap(req, "upload");
     const b = await jsonBody(req);

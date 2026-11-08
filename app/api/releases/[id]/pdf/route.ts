@@ -9,7 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Frozen combined PDF of a Submission Studio release: ?output=<groupId>. Integrity-checked; access-policy enforced. */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
     const session = requireCap(req, "read_private");
     const rel = getRelease(params.id);

@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Verify a selection (read-only): release gate + selection + recipient authorization + Guardian preflight findings. */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     requireCap(req, "memory");
     const site = getSite(params.id);

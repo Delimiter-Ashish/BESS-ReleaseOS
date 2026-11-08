@@ -1,7 +1,8 @@
 // Submission Studio generation: verify → build combined PDF(s) from approved bytes → store → seal the release.
 // Shared by the API route and the tests so both exercise exactly the same path.
+import { signoffFingerprint } from "../signoff";
 import type { Session } from "../auth";
-import { bytesFor, commitStudioRelease, findRevision, getReleases, getSite, putFile, StoreError } from "../store";
+import { bytesFor, commitStudioRelease, findSignoffRetry, studioOf, findRevision, getReleases, getSite, putFile, StoreError } from "../store";
 import { RECIPIENT_LABEL } from "./access";
 import { studioCheck } from "./check";
 import { buildCombinedPdf } from "./pdf";
@@ -9,7 +10,7 @@ import type { CombinedPdfOutput, StudioSelection } from "./types";
 
 const slug = (s: string) => s.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "part";
 
-export async function generateStudioRelease(siteId: string, sel: StudioSelection, session: Session, note: string | undefined, token: string | undefined) {
+async function generateOnce(siteId: string, sel: StudioSelection, session: Session, note: string | undefined, token: string | undefined) {
   if (!session.engineer) throw new StoreError(403, `${session.name} is not an authorized engineer`);
   const site = getSite(siteId);
   if (!site) throw new StoreError(404, "site not found");
@@ -33,4 +34,19 @@ export async function generateStudioRelease(siteId: string, sel: StudioSelection
   }
   const release = commitStudioRelease(site.id, sel, session, note, token, builtAt, outputs);
   return { release, outputs };
+}
+
+// Coalesce simultaneous retries; the frozen fingerprint also survives process restarts.
+const inFlight = new Map<string, ReturnType<typeof generateOnce>>();
+export async function generateStudioRelease(siteId: string, sel: StudioSelection, session: Session, note: string | undefined, token: string | undefined) {
+  if (!session.engineer) throw new StoreError(403, `${session.name} is not an authorized engineer`);
+  if ((note ?? "").trim().length < 3) throw new StoreError(400, "Release signoff requires a written note");
+  const key = signoffFingerprint("studio", siteId, sel, session, note, token);
+  const retry = findSignoffRetry(siteId, key);
+  if (retry) return { release: retry, outputs: studioOf(retry)!.outputs };
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+  const work = generateOnce(siteId, sel, session, note, token);
+  inFlight.set(key, work);
+  try { return await work; } finally { inFlight.delete(key); }
 }

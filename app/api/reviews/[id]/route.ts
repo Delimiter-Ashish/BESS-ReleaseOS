@@ -6,7 +6,8 @@ import { decideReview, StoreError } from "@/lib/store";
 export const runtime = "nodejs";
 
 /** Engineer decision: { decision: "approve" | "reject", note, resolveTaskIds? }. Reviewer identity comes from the signed session only. */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     const session = requireCap(req, "review");
     const b = await jsonBody(req);

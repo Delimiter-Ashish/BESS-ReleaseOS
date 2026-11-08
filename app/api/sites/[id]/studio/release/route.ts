@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
  * Engineer signoff → combined PDF(s) + sealed release: { purpose, templateId?, recipient?, groups, note, token }.
  * Re-verified before generation and again (synchronously, by token) before the release is sealed.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     const session = requireCap(req, "release");
     const b = await jsonBody(req, 128 * 1024);

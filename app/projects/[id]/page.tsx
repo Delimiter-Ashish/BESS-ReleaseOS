@@ -13,10 +13,12 @@ import { documentRegister, projectSummaries, readiness, TEMPLATE_STAGE } from "@
 
 export const dynamic = "force-dynamic";
 
-export default function Project({ params, searchParams }: { params: { id: string }; searchParams: { doc?: string; stage?: string } }) {
+export default async function Project({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ id: string }>; searchParams: Promise<{ doc?: string; stage?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const site = getSite(params.id);
   if (!site) notFound();
-  const s = getSession();
+  const s = await getSession();
   if (s.role === "public") return <Restricted what="Project details" role={s.role} />;
   const internal = isInternal(s);
   if (!internal && registerFor(s, site, documentRegister(site.id)).length === 0) return <Restricted what="This project" role={s.role} />;

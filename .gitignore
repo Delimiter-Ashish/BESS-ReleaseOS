@@ -34,3 +34,6 @@ packages/release-core/demo-output/
 # durable app state (lib/persistence.ts)
 /.data/
 /.data-demo/
+
+# Generated from the pinned PDF.js dependency at install time
+/public/pdf.worker.min.mjs

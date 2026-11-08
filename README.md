@@ -357,3 +357,9 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
   EQORE); evidence is a text match on the replaced identifier, so documents without a text layer get trigger-only
   impacts. Schedules are one due date per cycle (no recurrence rules). The legacy QR page `/p/:id` (portfolio UI) still
   shows hard-coded shutdown steps and site contacts; the explicitly-published page is `/e/:id`.
+
+### Public demonstration safeguards
+
+`RELEASEOS_PUBLIC_DEMO=1` enables global login (60/minute), mutation (600/minute; 240 per identity), and upload (60/hour, four concurrent) limits. Stored file bytes are capped at 100 MB. AI calls are capped at 100 per UTC day across all providers, including failed attempts; exhaustion uses the existing labeled deterministic fallback. The counter is written to `ai-usage.json` on the data volume before a call and is not cleared by demo resets. Overrides are listed in `.env.example`. These controls assume the configured single process; call counts are not a dollar budget, and provider-side spending limits remain necessary.
+
+The security update uses Next.js 15.5.29, React 19, PDF.js 4.10.38 (matching worker copied at install), and PostCSS 8.5.32 via a same-major override. PDF evaluation and the unused image optimizer are disabled. The remaining npm audit finding is minimatch glob amplification in the ESLint/TypeScript tooling chain; runtime dependencies audit clean. Lint only trusted repository paths; do not run tooling on attacker-supplied glob patterns.

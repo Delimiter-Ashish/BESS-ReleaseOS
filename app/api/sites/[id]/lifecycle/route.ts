@@ -1,3 +1,4 @@
+import { limitMutation } from "@/lib/resource-limits";
 import { NextResponse } from "next/server";
 import { AuthError, sessionFromRequest } from "@/lib/auth";
 import { handle, jsonBody } from "@/lib/http";
@@ -17,7 +18,8 @@ const ACTIONS: LifecycleAction["action"][] = ["set_stage", "settings", "add_obli
  * Signed-in users only. EQORE sees everything; facility / AHJ / supplier see only obligations whose document type the
  * access policy lets them view, without internal notes, change records or evidence quotes. asOf is read-only.
  */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
     const s = sessionFromRequest(req);
     if (s.role === "public") throw new AuthError(401, "Sign in required");
@@ -31,10 +33,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 /** POST /api/sites/:id/lifecycle  body: LifecycleAction (lib/lifecycle/types.ts). Role checks are server-side per action. */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     const s = sessionFromRequest(req);
     if (s.role === "public") throw new AuthError(401, "Sign in required");
+    limitMutation(req, s.userId);
     const body = await jsonBody(req);
     if (!ACTIONS.includes(body.action as LifecycleAction["action"])) throw new StoreError(400, `action must be one of ${ACTIONS.join(", ")}`);
     const result = await lifecycleAction(params.id, body as unknown as LifecycleAction, s);

@@ -10,8 +10,9 @@ import { documentRegister, projectSummaries } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
-export default function Projects({ searchParams }: { searchParams: { view?: string; status?: string } }) {
-  const s = getSession();
+export default async function Projects({ searchParams: searchParamsPromise }: { searchParams: Promise<{ view?: string; status?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const s = await getSession();
   if (s.role === "public") return <Restricted what="The project portfolio" role={s.role} />;
   // External roles: only projects with document types shared with them; counts from those shared records only.
   const scope = isInternal(s) ? undefined : new Map(externalScope(s, getSites(), documentRegister).map((x) => [x.site.id, x.rows]));

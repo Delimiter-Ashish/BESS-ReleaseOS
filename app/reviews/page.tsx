@@ -6,8 +6,9 @@ import { reviewQueue } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
-export default function Reviews({ searchParams }: { searchParams: { item?: string; project?: string; status?: string; kind?: string } }) {
-  const s = getSession();
+export default async function Reviews({ searchParams: searchParamsPromise }: { searchParams: Promise<{ item?: string; project?: string; status?: string; kind?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const s = await getSession();
   if (s.role !== "eqore") return <Restricted what="Engineering review" role={s.role} />;
   const items = reviewQueue(s);
   const status = searchParams.status === "all" || searchParams.status === "closed" ? searchParams.status : undefined;

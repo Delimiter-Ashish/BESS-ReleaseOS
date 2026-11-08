@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * { action: "resolve", note, revisionId? }   (requirements: engineer only, checked against an approved revision)
  * Identity always comes from the session cookie.
  */
-export async function POST(req: Request, { params }: { params: { id: string; itemId: string } }) {
+export async function POST(req: Request, { params: paramsPromise }: { params: Promise<{ id: string; itemId: string }> }) {
+  const params = await paramsPromise;
   return handle(async () => {
     const session = requireCap(req, "memory");
     const b = await jsonBody(req);

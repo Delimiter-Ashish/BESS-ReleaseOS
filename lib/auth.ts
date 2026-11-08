@@ -2,6 +2,7 @@
 // Users and passcodes are fixed demo identities (shown on the sign-in menu for judges).
 // What IS real: identity comes only from an HMAC-signed, httpOnly session cookie set by the
 // server. Request bodies can never claim a reviewer name or role. Replace with SSO/OIDC for production.
+import { limitMutation } from "./resource-limits";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { Role } from "./requirements";
@@ -69,8 +70,8 @@ export function decodeSession(token: string | undefined): Session {
 }
 
 /** Server components and route handlers. */
-export function getSession(): Session {
-  return decodeSession(cookies().get(SESSION_COOKIE)?.value);
+export async function getSession(): Promise<Session> {
+  return decodeSession((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
 export function sessionFromRequest(req: Request): Session {
@@ -105,5 +106,6 @@ export function requireCap(req: Request, cap: Capability): Session {
   const s = sessionFromRequest(req);
   if (s.role === "public") throw new AuthError(401, "Sign in required");
   if (!can(s, cap)) throw new AuthError(403, cap === "review" || cap === "release" ? `${s.name} is not an authorized engineer for this action` : `${s.name} is not permitted to ${cap}`);
+  limitMutation(req, s.userId);
   return s;
 }

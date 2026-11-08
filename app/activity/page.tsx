@@ -1,3 +1,4 @@
+import { decisionLabel } from "@/lib/activity";
 import Link from "next/link";
 import { Page, PageHeader, SyntheticNote, Restricted } from "@/components/kit";
 import { can, getSession } from "@/lib/auth";
@@ -18,8 +19,9 @@ const KIND: Record<Kind, { label: string; dot: string }> = {
 };
 
 /** Every row is a stored record with the identity and timestamp the server recorded. Nothing is generated here. */
-export default function Activity({ searchParams }: { searchParams: { project?: string; kind?: string; seeded?: string } }) {
-  const s = getSession();
+export default async function Activity({ searchParams: searchParamsPromise }: { searchParams: Promise<{ project?: string; kind?: string; seeded?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const s = await getSession();
   if (s.role !== "eqore") return <Restricted what="Activity history" role={s.role} />;
   const internal = can(s, "memory");
   const showSeeded = searchParams.seeded === "1";
@@ -29,13 +31,14 @@ export default function Activity({ searchParams }: { searchParams: { project?: s
   for (const site of sites) {
     const base = { projectId: site.id, projectName: site.name };
     for (const d of site.decisions ?? []) {
+      if (d.kind === "release_signoff") continue; // displayed once from the sealed release below
       const rev = d.revisionId ? site.documents.find((x) => x.id === d.revisionId) : undefined;
-      ev.push({ ...base, at: d.at, kind: d.kind === "release_signoff" ? "release" : "decision", who: d.reviewerName, seeded: d.seeded,
-        what: d.kind === "revision_review" ? `${d.decision === "approved" ? "Approved" : "Rejected"} ${rev ? `${name(rev.requirementId)} Rev ${rev.revLabel}` : "a revision"}` : d.kind === "dependency_resolution" ? `Resolved a dependency review${rev ? ` for ${name(rev.requirementId)} Rev ${rev.revLabel}` : ""}` : "Signed off a release",
+      ev.push({ ...base, at: d.at, kind: "decision", who: d.reviewerName, seeded: d.seeded,
+        what: decisionLabel(d, rev ? `${name(rev.requirementId)} Rev ${rev.revLabel}` : undefined),
         note: d.note, href: rev ? `/sites/${site.id}/documents/${encodeURIComponent(rev.id)}` : undefined });
     }
     for (const r of site.documents) ev.push({ ...base, at: r.uploadedAt, kind: "upload", who: r.uploadedBy, seeded: !r.engine || r.engine === "seed", what: `${name(r.requirementId)} Rev ${r.revLabel} · ${r.fileName}`, note: r.engine && r.engine !== "seed" ? `Extraction: ${r.engine}${r.model ? ` (${r.model})` : ""}` : "Seeded demo record", href: `/sites/${site.id}/documents/${encodeURIComponent(r.id)}` });
-    for (const rel of getReleases(site.id)) ev.push({ ...base, at: rel.builtAt, kind: "release", who: rel.builtBy, what: `${pkgLabel(rel.templateId)} R${rel.number} sealed (${rel.items.length} documents)`, note: rel.note, href: `/sites/${site.id}/releases/${encodeURIComponent(rel.id)}`, seeded: !rel.builtById });
+    for (const rel of getReleases(site.id)) ev.push({ ...base, at: rel.builtAt, kind: "release", who: rel.builtBy, what: `${pkgLabel(rel.templateId)} R${rel.number} sealed (${rel.items.length} documents)`, note: rel.note, href: `/sites/${site.id}/releases/${encodeURIComponent(rel.id)}`, seeded: !rel.builtById || rel.builtById === "seed-engineer" });
     if (internal) {
       for (const c of site.communications ?? []) ev.push({ ...base, at: c.importedAt, kind: "communication", who: c.importedBy, what: `${c.subject ?? "(no subject)"} — from ${c.sender}`, note: `${c.itemIds.length} suggestion(s) · ${c.analysis.engine}`, href: `/memory?project=${site.id}&type=ahj_requirement` });
       for (const m of site.memory ?? []) for (const h of m.history) if (h.action !== "suggested") ev.push({ ...base, at: h.at, kind: "memory", who: h.byName, what: `${h.action[0].toUpperCase()}${h.action.slice(1).replace("_", " ")}: ${m.title}`, note: h.note, href: `/memory?project=${site.id}&type=ahj_requirement&item=${encodeURIComponent(m.id)}` });

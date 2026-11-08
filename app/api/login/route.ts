@@ -1,3 +1,4 @@
+import { limitLogin } from "@/lib/resource-limits";
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { DEMO_USERS, encodeSession, SESSION_COOKIE } from "@/lib/auth";
@@ -7,10 +8,11 @@ export const runtime = "nodejs";
 
 // DEMO-ONLY sign-in (non-production). Accepts { userId, passcode } or Kaushik's original { role, code }.
 const LEGACY_ROLE_USER: Record<string, string> = { ahj: "ahj", facility: "facility", eqore: "arivera", supplier: "supplier" };
-const eq = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const eq = (a: string, b: string) => Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 export async function POST(req: Request) {
   return handle(async () => {
+    limitLogin();
     const b = await jsonBody(req, 4096);
     const role = asString(b.role, 20);
     if (role === "public" || b.logout === true) {

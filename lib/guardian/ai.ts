@@ -1,3 +1,4 @@
+import { publicDemo, reserveAiCall } from "../resource-limits";
 // Advisory AI review of cross-document findings (OpenAI Responses API, strict schema). Server-only.
 // The AI sees both documents' evidence plus surrounding lines and says whether they describe the same equipment
 // and interface. Its answer is SHOWN next to the deterministic classification; it never changes gating.
@@ -53,7 +54,8 @@ export async function reviewFinding(f: ConsistencyFinding, revs: Map<string, Rev
   if (hit) return hit;
   const ctxA = contextFor(f.a, revs.get(f.a.revisionId)), ctxB = contextFor(f.b, revs.get(f.b.revisionId));
   const side = (o: Observation, ctx: string) => ({ document: REQ_BY_ID[o.requirementId]?.name ?? o.requirementId, revision: o.revLabel, page: o.page ?? null, quantity: o.quantity, statedValue: o.display, evidence: o.evidence, surroundingText: ctx });
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: Number(process.env.OPENAI_TIMEOUT_MS || 90_000), maxRetries: 1 });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: Number(process.env.OPENAI_TIMEOUT_MS || 90_000), maxRetries: publicDemo() ? 0 : 1 });
+  reserveAiCall();
   const res = await client.responses.create({
     model: OPENAI_MODEL(), instructions: INSTRUCTIONS, store: false,
     input: [{ role: "user", content: [{ type: "input_text", text: JSON.stringify({ a: side(f.a, ctxA), b: side(f.b, ctxB) }) }] }],

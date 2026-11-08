@@ -69,7 +69,7 @@ export default function Lifecycle({ siteId, isEqore, isEngineer, canRecord }: { 
             {asOf && <button className="btn-ghost text-xs" onClick={() => setAsOf("")}>Today</button>}
             {isEqore && (
               <>
-                <select className="rounded border px-2 py-1.5" defaultValue="" onChange={async (e) => { const to = e.target.value; e.target.value = ""; if (!to) return; const note = ask(`Reason for moving to ${to}:`); if (note) await act({ action: "set_stage", to, note }, `Stage changed to ${to}.`); }}>
+                <select className="min-w-0 max-w-full rounded border px-2 py-1.5" defaultValue="" onChange={async (e) => { const to = e.target.value; e.target.value = ""; if (!to) return; const note = ask(`Reason for moving to ${to}:`); if (note) await act({ action: "set_stage", to, note }, `Stage changed to ${to}.`); }}>
                   <option value="">Move stage…</option>
                   {STAGES.filter((s) => s !== v.stage).map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -128,12 +128,12 @@ export default function Lifecycle({ siteId, isEqore, isEngineer, canRecord }: { 
         <section className="card space-y-3 p-5">
           <h2 className="text-lg font-semibold">Record a site change</h2>
           <p className="text-xs text-slate-500">A recorded change is only a proposal. Nothing is flagged until an EQORE user confirms it; then ReleaseOS lists the obligations that may need review, with evidence, for an engineer to resolve.</p>
-          <div className="grid gap-2 text-sm md:grid-cols-5">
-            <select className="rounded border px-2 py-1.5" value={chg.kind} onChange={(e) => setChg({ ...chg, kind: e.target.value })}>{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-            <input className="rounded border px-2 py-1.5 md:col-span-2" placeholder="Description" value={chg.description} onChange={(e) => setChg({ ...chg, description: e.target.value })} />
-            <input className="rounded border px-2 py-1.5" placeholder="Replaced (e.g. 2 x Dynapower MPS125)" value={chg.from} onChange={(e) => setChg({ ...chg, from: e.target.value })} />
-            <input className="rounded border px-2 py-1.5" placeholder="New (e.g. 2 x Northbridge NPI-125)" value={chg.to} onChange={(e) => setChg({ ...chg, to: e.target.value })} />
-            <input type="date" className="rounded border px-2 py-1.5" value={chg.effectiveDate} onChange={(e) => setChg({ ...chg, effectiveDate: e.target.value })} />
+          <div className="grid min-w-0 grid-cols-1 gap-2 text-sm md:grid-cols-5">
+            <select className="min-w-0 max-w-full rounded border px-2 py-1.5" value={chg.kind} onChange={(e) => setChg({ ...chg, kind: e.target.value })}>{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+            <input className="min-w-0 max-w-full rounded border px-2 py-1.5 md:col-span-2" placeholder="Description" value={chg.description} onChange={(e) => setChg({ ...chg, description: e.target.value })} />
+            <input className="min-w-0 max-w-full rounded border px-2 py-1.5" placeholder="Replaced (e.g. 2 x Dynapower MPS125)" value={chg.from} onChange={(e) => setChg({ ...chg, from: e.target.value })} />
+            <input className="min-w-0 max-w-full rounded border px-2 py-1.5" placeholder="New (e.g. 2 x Northbridge NPI-125)" value={chg.to} onChange={(e) => setChg({ ...chg, to: e.target.value })} />
+            <input type="date" className="min-w-0 max-w-full rounded border px-2 py-1.5" value={chg.effectiveDate} onChange={(e) => setChg({ ...chg, effectiveDate: e.target.value })} />
             <button className="btn-primary" disabled={busy} onClick={() => act({ action: "propose_change", ...chg }, "Change recorded as a proposal.")}>Record change</button>
           </div>
           {isEqore && v.changes.length > 0 && (
@@ -190,7 +190,7 @@ export default function Lifecycle({ siteId, isEqore, isEngineer, canRecord }: { 
         <section className="card space-y-2 p-5" id="publications">
           <h2 className="text-lg font-semibold">First-responder (QR) publication</h2>
           <p className="text-xs text-slate-500">Nothing is public by default. An engineer must explicitly publish each approved revision; the public page serves it only while it is still the current approved revision and its hash matches. <Link className="underline" href={`/p/${siteId}`} target="_blank">Open public QR page ↗</Link></p>
-          <ul className="text-sm">{v.publications.map((p) => <li key={p.id} className="flex items-center gap-2 py-1"><span className={`pill ${p.status === "published" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-slate-50 text-slate-500 ring-slate-200"}`}>{p.status}</span>{p.title} <span className="text-xs text-slate-500">by {p.publishedBy}</span>{p.status === "published" && <button className="btn-ghost text-xs" disabled={busy} onClick={async () => { const note = ask("Why withdraw?"); if (note) await act({ action: "withdraw_emergency", publicationId: p.id, note }); }}>Withdraw</button>}</li>)}</ul>
+          <ul className="text-sm">{v.publications.map((p) => <li key={p.id} className="flex flex-wrap items-center gap-2 py-1"><span className={`pill ${p.status === "published" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-slate-50 text-slate-500 ring-slate-200"}`}>{p.status}</span>{p.title} <span className="text-xs text-slate-500">by {p.publishedBy}</span>{p.status === "published" && <button className="btn-ghost text-xs" disabled={busy} onClick={async () => { const note = ask("Why withdraw?"); if (note) await act({ action: "withdraw_emergency", publicationId: p.id, note }); }}>Withdraw</button>}</li>)}</ul>
           <div className="flex flex-wrap gap-2">{v.publishCandidates.map((c) => <button key={c.revisionId} className="btn-ghost text-xs" disabled={busy || !isEngineer} title={isEngineer ? "" : "Engineer only"} onClick={async () => { const note = ask(`Publish “${c.title}” to the public QR page? Approval note:`); if (note) await act({ action: "publish_emergency", revisionId: c.revisionId, note }, "Published to the public emergency page."); }}>Publish {c.title}</button>)}</div>
         </section>
       )}
