@@ -92,7 +92,12 @@ export function packageReadiness(site: Site, template: PackageTemplate) {
     for (const t of tasks) {
       if (state === "ready") state = "needs_eng_review";
       const src = REQ_BY_ID[t.sourceRequirementId]?.name ?? t.sourceRequirementId;
-      issues.push({ code: "CHANGED_SOURCE", requirementId: rid, taskId: t.id, message: `${name}: dependency review open — ${src} changed (${t.changedKeys.join(", ")})`, source: { kind: "dependency_graph", label: `${name} depends on ${src}` }, affectedDocument: name, responsibleParty: "EQORE engineer", nextAction: `Engineer: confirm ${name} remains valid, or upload and approve a revised ${name}` });
+      if (t.kind === "consistency") {
+        issues.push({ code: "CROSS_DOC_DISCREPANCY", requirementId: rid, taskId: t.id, message: `${name}: ${t.explanation}`, source: { kind: "consistency_check", label: `Cross-document check: ${name} vs ${src}`, evidence: t.consistency?.[0] ? `${t.consistency[0].a.evidence} ↔ ${t.consistency[0].b.evidence}` : undefined }, affectedDocument: name, responsibleParty: "EQORE engineer", nextAction: `Engineer: confirm which value is correct — re-issue ${name} with the current value, or resolve with a written explanation` });
+        continue;
+      }
+      const extra = t.consistency?.length ? ` · cross-document check: ${t.consistency.map((c) => `${c.b.display} vs ${c.a.display}`).join("; ")}` : "";
+      issues.push({ code: "CHANGED_SOURCE", requirementId: rid, taskId: t.id, message: `${name}: dependency review open — ${src} changed (${t.changedKeys.join(", ")})${extra}`, source: { kind: "dependency_graph", label: `${name} depends on ${src}` }, affectedDocument: name, responsibleParty: "EQORE engineer", nextAction: `Engineer: confirm ${name} remains valid, or upload and approve a revised ${name}` });
     }
     // Confirmed requirements for this document: an UPDATED revision may be required, then explicit resolution.
     for (const m of asked.filter((x) => x.status === "confirmed")) {

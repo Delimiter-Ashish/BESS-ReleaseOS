@@ -17,6 +17,9 @@ export interface TaskView {
   resolvedAt?: string;
   resolution?: string;
   resolutionNote?: string;
+  kind?: "dependency" | "consistency";
+  /** Verified cross-document discrepancies (Project Guardian) covered by this review. */
+  consistency?: { findingId: string; quantity: string; a: { display: string; evidence: string; page?: number; doc?: string }; b: { display: string; evidence: string; page?: number; doc?: string } }[];
 }
 
 export default function EngineeringTasks({ siteId, tasks, canReview }: { siteId: string; tasks: TaskView[]; canReview: boolean }) {
@@ -38,10 +41,10 @@ export default function EngineeringTasks({ siteId, tasks, canReview }: { siteId:
 
   if (!tasks.length) return null;
   return (
-    <section className="card overflow-hidden border-orange-200">
+    <section id="tasks" className="card overflow-hidden border-orange-200">
       <div className="flex items-center justify-between border-b border-orange-200 bg-orange-50 px-4 py-2.5">
-        <div className="text-sm font-semibold text-orange-900">Dependency reviews · {open.length} open</div>
-        <div className="text-[11px] text-orange-800">Raised by rules from the dependency graph · block releases until resolved</div>
+        <div className="text-sm font-semibold text-orange-900">Engineering reviews · {open.length} open</div>
+        <div className="text-[11px] text-orange-800">Raised by rules (dependency graph + cross-document check) · block releases until resolved</div>
       </div>
       <ul className="divide-y divide-slate-100">
         {open.map((t) => (
@@ -52,7 +55,14 @@ export default function EngineeringTasks({ siteId, tasks, canReview }: { siteId:
               <span className="pill bg-orange-50 text-orange-800 ring-orange-200">{t.dependent}{t.dependentRev ? ` Rev ${t.dependentRev}` : ""}</span>
               {t.changedKeys.map((k) => <span key={k} className="font-mono text-[11px] text-slate-500">{k}</span>)}
             </div>
+            {t.kind === "consistency" && <span className="pill bg-red-50 text-red-700 ring-red-200">Cross-document discrepancy</span>}
             <p className="text-xs text-slate-600">{t.explanation}</p>
+            {(t.consistency ?? []).map((c) => (
+              <div key={c.findingId} className="grid gap-2 rounded-md bg-red-50/50 p-2 text-[11px] sm:grid-cols-2">
+                {[c.a, c.b].map((o, i) => <div key={i}><span className="font-semibold">{o.doc ?? (i ? "Other document" : "Source")}{o.page ? ` p.${o.page}` : ""}: {o.display}</span><div className="italic text-slate-600">“{o.evidence}”</div></div>)}
+                <div className="text-slate-500 sm:col-span-2">Same {c.quantity} of the same equipment stated differently — engineer to decide which is current (not an incompatibility finding).</div>
+              </div>
+            ))}
             {t.aiImpact && <p className="rounded-md bg-amber-50 p-2 text-[11px] text-amber-900"><b>Possible consequences (advisory):</b> {t.aiImpact}</p>}
             {!t.sourceApproved ? (
               <div className="text-xs text-violet-700">◷ Waiting for the source revision to be approved — the dependency review cannot be resolved before that.</div>

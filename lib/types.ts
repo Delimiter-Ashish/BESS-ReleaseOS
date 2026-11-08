@@ -138,6 +138,12 @@ export interface EngineeringTask {
   resolution?: "confirmed_no_change" | "new_revision_approved";
   resolutionNote?: string;
   resolvedByDecisionId?: string;
+  // ---- additive (Project Guardian) ----
+  /** "consistency" = raised by the cross-document check (lib/guardian); default "dependency". */
+  kind?: "dependency" | "consistency";
+  /** Verified cross-document discrepancies this task covers (finding ids are stable fingerprints). */
+  findingIds?: string[];
+  consistency?: { findingId: string; quantity: string; reason: string; a: { revisionId: string; display: string; evidence: string; page?: number }; b: { revisionId: string; display: string; evidence: string; page?: number } }[];
 }
 
 /** Immutable audit record of a human decision (core: ReviewDecision). */

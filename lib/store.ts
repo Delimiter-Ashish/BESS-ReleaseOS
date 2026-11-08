@@ -11,6 +11,7 @@ import { pinnedFromSnapshot, sealRelease } from "./engine-adapter";
 import type { ExtractionResult } from "./extract";
 import { affectedDependents, compareFacts, dependencyExplanation, materialChanges } from "./intelligence";
 import { REQ_BY_ID, TEMPLATE_BY_ID } from "./requirements";
+import { syncConsistencyTasks } from "./guardian/sync";
 import { applicableItems } from "./memory/readiness";
 import { buildManifest, latestApproved, latestRelease, packageReadiness, revisionsOf } from "./release";
 import { clearState, loadState, saveBlob, saveState, type StoredFile } from "./persistence";
@@ -231,8 +232,10 @@ export function decideReview(taskId: string, decision: "approve" | "reject", ses
     for (const t of site.engTasks ?? []) if (t.sourceRevisionId === rev.id && t.status === "open") t.status = "superseded";
   }
   for (const t of resolving) Object.assign(t!, { status: "resolved", resolvedBy: session.name, resolvedAt: at, resolution: "new_revision_approved", resolutionNote: text, resolvedByDecisionId: dec.id });
+  // Project Guardian: the approved document set changed — re-run the deterministic cross-document check.
+  const consistency = decision === "approve" ? syncConsistencyTasks(site, at) : undefined;
   persist();
-  return { task, revision: rev, decision: dec };
+  return { task, revision: rev, decision: dec, consistency };
 }
 
 function assertSourceApproved(site: Site, t: EngineeringTask) {

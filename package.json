@@ -17,7 +17,8 @@
     "test:app": "npm run core:build && RELEASEOS_PERSIST=off tsx --test tests/*.test.ts",
     "e2e": "node scripts/e2e.mjs",
     "postinstall": "npm --prefix packages/release-core ci --no-audit --no-fund && npm run core:build",
-    "e2e:memory": "node scripts/e2e-memory.mjs"
+    "e2e:memory": "node scripts/e2e-memory.mjs",
+    "e2e:guardian": "node scripts/e2e-guardian.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

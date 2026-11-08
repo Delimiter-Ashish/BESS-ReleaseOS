@@ -67,7 +67,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
   const tasks: TaskView[] = engTasks.filter((t) => t.status !== "superseded").map((t) => {
     const src = site.documents.find((d) => d.id === t.sourceRevisionId);
     const dep = t.dependentRevisionId ? site.documents.find((d) => d.id === t.dependentRevisionId) : undefined;
-    return { id: t.id, source: name(t.sourceRequirementId), sourceRev: src?.revLabel ?? "?", sourceApproved: src?.status === "approved" && latestApproved(site, t.sourceRequirementId)?.id === src.id, dependent: name(t.dependentRequirementId), dependentRev: dep?.revLabel, changedKeys: t.changedKeys, explanation: t.explanation, aiImpact: t.aiImpact, status: t.status, resolvedBy: t.resolvedBy, resolvedAt: t.resolvedAt, resolution: t.resolution, resolutionNote: t.resolutionNote };
+    return { id: t.id, source: name(t.sourceRequirementId), sourceRev: src?.revLabel ?? "?", sourceApproved: src?.status === "approved" && latestApproved(site, t.sourceRequirementId)?.id === src.id, dependent: name(t.dependentRequirementId), dependentRev: dep?.revLabel, changedKeys: t.changedKeys, explanation: t.explanation, aiImpact: t.aiImpact, status: t.status, resolvedBy: t.resolvedBy, resolvedAt: t.resolvedAt, resolution: t.resolution, resolutionNote: t.resolutionNote, kind: t.kind, consistency: t.consistency?.map((c) => { const da = site.documents.find((d) => d.id === c.a.revisionId), db = site.documents.find((d) => d.id === c.b.revisionId); return { findingId: c.findingId, quantity: c.quantity, a: { ...c.a, doc: da ? `${name(da.requirementId)} Rev ${da.revLabel}` : undefined }, b: { ...c.b, doc: db ? `${name(db.requirementId)} Rev ${db.revLabel}` : undefined } }; }) };
   });
 
   const packages = PACKAGE_TEMPLATES.map((t) => {
@@ -82,7 +82,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
     <>
       <AppHeader />
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500"><span><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</span><Link href={`/sites/${site.id}/memory`} className="pill bg-indigo-50 text-indigo-700 ring-indigo-200 hover:bg-indigo-100">Project memory &amp; pre-submission check →</Link></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500"><span><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</span><span className="flex gap-2"><Link href={`/sites/${site.id}/guardian`} className="pill bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-700">Project Guardian · Run Preflight →</Link><Link href={`/sites/${site.id}/memory`} className="pill bg-indigo-50 text-indigo-700 ring-indigo-200 hover:bg-indigo-100">Project memory &amp; pre-submission check →</Link></span></div>
 
         <section className="card flex flex-wrap items-start justify-between gap-6 p-5">
           <div className="space-y-1">

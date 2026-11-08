@@ -131,10 +131,12 @@ export type PreSubmissionCode =
   // existing deterministic release gate
   | "MISSING_DOCUMENT" | "NO_APPROVED_VERSION" | "PENDING_REVIEW" | "CHANGED_SOURCE"
   // project memory (confirmed items only)
-  | "OUTDATED_REVISION" | "REQUIREMENT_UNRESOLVED" | "OPEN_ACTION" | "OPEN_QUESTION" | "OPEN_DECISION";
+  | "OUTDATED_REVISION" | "REQUIREMENT_UNRESOLVED" | "OPEN_ACTION" | "OPEN_QUESTION" | "OPEN_DECISION"
+  // project guardian (verified cross-document discrepancy under engineer review)
+  | "CROSS_DOC_DISCREPANCY";
 
 export interface IssueSource {
-  kind: "package_template" | "dependency_graph" | "project_memory";
+  kind: "package_template" | "dependency_graph" | "project_memory" | "consistency_check";
   label: string; // human description of why this is required
   memoryItemId?: string;
   communicationId?: string;
@@ -160,11 +162,11 @@ export interface PreSubmissionIssue {
   nextAction?: string;
 }
 
-export type BlockerCategory = "missing_document" | "outdated_revision" | "pending_review" | "dependency" | "requirement" | "action" | "question" | "decision";
+export type BlockerCategory = "missing_document" | "outdated_revision" | "pending_review" | "dependency" | "consistency" | "requirement" | "action" | "question" | "decision";
 export const CATEGORY_OF: Record<PreSubmissionCode, BlockerCategory> = {
   MISSING_DOCUMENT: "missing_document", NO_APPROVED_VERSION: "missing_document", OUTDATED_REVISION: "outdated_revision",
   PENDING_REVIEW: "pending_review", CHANGED_SOURCE: "dependency", REQUIREMENT_UNRESOLVED: "requirement",
-  OPEN_ACTION: "action", OPEN_QUESTION: "question", OPEN_DECISION: "decision",
+  OPEN_ACTION: "action", OPEN_QUESTION: "question", OPEN_DECISION: "decision", CROSS_DOC_DISCREPANCY: "consistency",
 };
 
 /** GET /api/sites/:id/presubmission?templateId=… — "Before we move forward, what are we forgetting?" */

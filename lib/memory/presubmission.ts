@@ -4,7 +4,7 @@ import { TEMPLATE_BY_ID } from "../requirements";
 import type { Site } from "../types";
 import { CATEGORY_OF, type BlockerCategory, type PreSubmissionReport } from "./types";
 
-const CATS: BlockerCategory[] = ["missing_document", "outdated_revision", "pending_review", "dependency", "requirement", "action", "question", "decision"];
+const CATS: BlockerCategory[] = ["missing_document", "outdated_revision", "pending_review", "dependency", "consistency", "requirement", "action", "question", "decision"];
 
 export function preSubmissionReport(site: Site, templateId: string, opts: { redactEvidence?: boolean } = {}): PreSubmissionReport | undefined {
   const t = TEMPLATE_BY_ID[templateId];

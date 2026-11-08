@@ -131,3 +131,20 @@ await makePdf("SYNTHETIC_Ventilation_Plan_RevA.pdf", "BESS Ventilation and Exhau
     "Engineer of record review required. Not a certification of code compliance.",
   ],
 ]);
+
+// Project Guardian negative test: valid DIFFERENT voltages on opposite sides of a transformer (must NOT be flagged).
+await makePdf("SYNTHETIC_Interconnection_Application_RevB.pdf", "Interconnection Application Rev B", [
+  [
+    "# Interconnection Application - Electrical Interface Summary (synthetic)",
+    "Applicant: Century Tywood J3 Corp (synthetic)",
+    "Document No.: CTJ3-IX-002",
+    "Revision: B",
+    "Date: 2026-11-06",
+    "",
+    "# Point of interconnection",
+    "Utility service voltage: 13,200 V (Eversource primary)",
+    "Step-up transformer T1: 13,200 V primary / 600 V secondary",
+    "BESS disconnect NSG-4000 on transformer T1 secondary: 600 V",
+    "Export limit: 250 kW AC",
+  ],
+]);

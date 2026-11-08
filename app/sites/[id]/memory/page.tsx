@@ -12,8 +12,8 @@ import { getSite } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-const CAT_LABEL = { missing_document: "Missing documents", outdated_revision: "Outdated revisions", pending_review: "Pending reviews", dependency: "Engineering dependencies", requirement: "Confirmed requirements", action: "Stakeholder actions", question: "Open questions", decision: "Open decisions" } as const;
-const SRC_LABEL = { package_template: "Checklist", dependency_graph: "Dependency graph", project_memory: "Project memory" } as const;
+const CAT_LABEL = { missing_document: "Missing documents", outdated_revision: "Outdated revisions", pending_review: "Pending reviews", dependency: "Engineering dependencies", consistency: "Cross-document discrepancies", requirement: "Confirmed requirements", action: "Stakeholder actions", question: "Open questions", decision: "Open decisions" } as const;
+const SRC_LABEL = { package_template: "Checklist", dependency_graph: "Dependency graph", project_memory: "Project memory", consistency_check: "Cross-document check" } as const;
 
 export default function MemoryPage({ params }: { params: { id: string } }) {
   const site = getSite(params.id);

@@ -14,6 +14,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const out = decideReview(params.id, b.decision, session, asString(b.note), asStringArray(b.resolveTaskIds));
     const { textLayer: _t, ...revision } = out.revision;
     void _t;
-    return NextResponse.json({ ok: true, task: out.task, revision, decision: out.decision });
+    // consistency: Project Guardian result of re-checking the approved document set (created / attached / superseded review tasks)
+    return NextResponse.json({ ok: true, task: out.task, revision, decision: out.decision, consistency: out.consistency ? { created: out.consistency.created.map((t) => t.id), attached: out.consistency.attached, superseded: out.consistency.superseded } : undefined });
   });
 }

@@ -30,6 +30,8 @@ npm run typecheck && npm run build
 BASE=http://localhost:3000 npm run e2e     # 25 HTTP checks against a running server (resets the store)
 npm run e2e:memory                         # 17 project-memory checks; starts its own server on :3102 incl. a restart
 E2E_PROVIDER=openai npm run e2e:memory     # same scenario with real OpenAI calls (synthetic email + PDF)
+npm run e2e:guardian                       # Project Guardian demo (16 checks incl. restart + transformer negative test)
+E2E_PROVIDER=openai npm run e2e:guardian   # same, with live OpenAI extraction + advisory AI review
 node scripts/openai-contract.mjs           # OpenAI provider wiring vs a mock Responses endpoint (no key needed; needs a prior build)
 ```
 
@@ -93,6 +95,48 @@ requirement → build R2 (pins the ventilation plan). `SYNTHETIC_Injection_Email
 
 Build a release with the `token` from the report (`POST /api/sites/:id/releases { templateId, note, readinessToken }`).
 
+## Project Guardian — cross-source preflight
+
+`/sites/S-1001/guardian` (button on the site page). Typed contract: `lib/guardian/types.ts`.
+
+- **Evidence graph** (`lib/guardian/graph.ts`): built on demand from the store — communications, memory items,
+  document families, revisions, facts (with pages), engineering/review tasks, decisions, templates, releases and
+  consistency findings. Every edge carries `reason`, `sourceIds`, `at` and the verbatim `evidence` when it came from text.
+- **Cross-document consistency** (`observations.ts`, `consistency.ts`): electrical values (voltage, current,
+  interrupting) are read from each current document's PDF text layer line by line (or its recorded facts) together
+  with **equipment role, identifiers (e.g. NSG-4000, T1), interface side (primary/secondary/utility/DC) and rating vs
+  nominal**. Only related documents (dependency graph or shared package) are compared, and only like with like:
+  - `verified_discrepancy` — same quantity, same equipment, same interface, different values → engineer review
+  - `potential_inconsistency` — e.g. a rating below a stated nominal value → investigate
+  - `explained_difference` — e.g. opposite sides of a transformer stated in the documents, rating ≥ nominal
+  - `consistent`, `insufficient_evidence` (a value without equipment context)
+  Revision-history lines are ignored. Different equipment with no stated relationship is not compared.
+  Nothing is described as incompatible or noncompliant.
+- **Gating**: when an approval changes the approved document set, verified discrepancies are attached to the open
+  dependency review for that pair or raised as a new **consistency review task** (`EngineeringTask.kind = "consistency"`),
+  which blocks via `CROSS_DOC_DISCREPANCY` and is resolved through the existing review endpoints. A task whose
+  discrepancy disappears (document re-issued) is superseded.
+- **AI** (`ai.ts`, optional `ai: true`): OpenAI gives a second opinion (same equipment? same interface?) with quotes
+  checked against the surrounding text. Shown next to the deterministic class, flagged when it disagrees,
+  never applied to gating. Cached in memory only.
+- **Preflight** (`preflight.ts`, read-only): blockers = exactly the release gate, each with evidence, affected files,
+  responsible role, next action and a clickable evidence chain; plus candidate-view consistency findings
+  (pending revisions included), unconfirmed suggestions and changes since the last release.
+- **Time Machine** (`timemachine.ts`): frozen release snapshot (integrity re-verified) vs today — new requirements,
+  added checklist documents, replaced/pending versions with fact changes, new/resolved reviews, current blockers,
+  and why a fresh submission may be needed.
+
+| Method & path | Who | Returns |
+|---|---|---|
+| `POST /api/sites/:id/preflight` `{ templateId, ai? }` | EQORE | `{ report: PreflightReport }` |
+| `GET /api/sites/:id/timemachine?releaseId=` | EQORE | `{ report: TimeMachineReport }` |
+| `GET /api/sites/:id/graph[?focus=<nodeId>&depth=]` | EQORE | `{ graph: EvidenceGraph }` |
+| `POST /api/reviews/:id` (existing) | engineer | now also `consistency: { created, attached, superseded }` |
+
+Demo docs: `SYNTHETIC_Switchgear_Spec_RevB.pdf` (600 VAC) vs the seeded plan set ("480 VAC AC disconnect", p.13) →
+verified discrepancy; `SYNTHETIC_Plan_Set_RevC.pdf` resolves it; `SYNTHETIC_Interconnection_Application_RevB.pdf`
+(13,200 V utility / T1 13,200/600 V / 600 V disconnect) is the negative test — explained, not flagged.
+
 ## Persistence
 
 Every mutation writes `RELEASEOS_DATA_DIR/state.json` atomically (default `./.data`, git-ignored); uploaded bytes
@@ -122,6 +166,7 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 |---|---|
 | `lib/store.ts` | The single authoritative store; all mutations and rules |
 | `lib/persistence.ts` | Atomic JSON snapshot + content-addressed upload bytes; integrity-checked reload |
+| `lib/guardian/*` | Evidence graph, cross-document consistency, preflight, Time Machine (contract: `types.ts`) |
 | `lib/memory/*` | Communication intelligence, project register, pre-submission report (contract: `types.ts`) |
 | `lib/engine-adapter.ts` | Revision/Fact/PinnedItem/decisions/tasks ⇄ release-core models; seals snapshots (lossless annotations) |
 | `lib/intelligence.ts`, `lib/normalize.ts` | Unit normalization, change classification, dependency tasks, rule-based impact notes |
