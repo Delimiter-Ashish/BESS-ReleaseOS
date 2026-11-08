@@ -2,7 +2,7 @@ import Link from "next/link";
 import ImportCenter from "@/components/inbox/ImportCenter";
 import { ago, DocStatusPill, Page, PageHeader, Restricted } from "@/components/kit";
 import { can, getSession } from "@/lib/auth";
-import { REQUIREMENTS, REQ_BY_ID, STAGES, stageIndex } from "@/lib/requirements";
+import { DOCUMENT_TYPES, REQ_BY_ID, STAGES, stageIndex } from "@/lib/requirements";
 import { getSites } from "@/lib/store";
 import { externalScope, isInternal } from "@/lib/view-access";
 import { documentRegister, revisionProvenance } from "@/lib/workspace";
@@ -26,7 +26,7 @@ export default function Inbox({ searchParams }: { searchParams: { project?: stri
         <ImportCenter
           projects={sites.map((x) => ({ id: x.id, name: x.name, stage: STAGES[stageIndex(x.stage)].label }))}
           defaultProject={project} expect={expect} canUpload={can(s, "upload")} userName={s.name}
-          requirements={REQUIREMENTS.filter((r) => !allowedTypes || allowedTypes.has(r.id)).map((r) => ({ id: r.id, name: r.name }))}
+          requirements={DOCUMENT_TYPES.filter((r) => !allowedTypes || allowedTypes.has(r.id)).map((r) => ({ id: r.id, name: r.name }))}
         />
         <aside className="space-y-4">
           <div className="card p-4">
