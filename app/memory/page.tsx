@@ -36,7 +36,8 @@ export default function Memory({ searchParams }: { searchParams: { project?: str
   return (
     <Page>
       <PageHeader eyebrow="Project Guardian · Action Center" title="What are we forgetting?" subtitle="Every finding is computed from project records — missing documents, revisions awaiting engineers, cross-document conflicts, outdated packages and requirements from communications — and links to its original evidence." />
-      <ActionCenter findings={visible} projects={sites.map((x) => ({ id: x.id, name: x.name }))} initialProject={project} initialType={searchParams.type} memory={memory} />
+      {/* Keyed on the URL parameters: a finding's "Resolve →" link (same route, ?type=…&item=…) must remount with that tab and focus. */}
+      <ActionCenter key={`${project ?? ""}|${searchParams.type ?? ""}|${searchParams.item ?? ""}`} findings={visible} projects={sites.map((x) => ({ id: x.id, name: x.name }))} initialProject={project} initialType={searchParams.type} memory={memory} />
     </Page>
   );
 }

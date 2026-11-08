@@ -1,5 +1,6 @@
 // Project Assurance view models: CSV seed, stage applicability, findings, review queue, readiness.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { Session } from "../lib/auth";
 import { parseCsv } from "../lib/demo-data";
@@ -49,9 +50,8 @@ test("readiness only counts the package's own requirements", () => {
 
 // Regression (demo crash, digest 1164880037): after the requested document is APPROVED but the confirmed requirement is
 // not yet resolved, the gate reports needs_eng_review WITHOUT an engineering task. The view must not assume tasks[0].
-test("approved requested document with an unresolved confirmed requirement renders (no tasks[0] crash)", async () => {
+async function approvedVentilationWithOpenRequirement() {
   store.resetStore();
-  const { readFileSync } = await import("node:fs");
   const { readTextLayer } = await import("../lib/pdf");
   const { rulesExtract } = await import("../lib/extract");
   const { parseEmailHeaders } = await import("../lib/memory/email");
@@ -71,10 +71,39 @@ test("approved requested document with an unresolved confirmed requirement rende
   const ex = store.saveExtraction({ siteId: "S-1001", fileId, sha256, fileName: "vent.pdf", mediaType: "application/pdf", textLayer: layer.joined, pageCount: layer.pageCount, result: { ...rulesExtract("vent.pdf", layer), provider: "rules", fallback: false }, impacts: {}, createdBy: PM.userId });
   const sub = store.submitRevision("S-1001", { extractionId: ex.id, requirementId: "ventilation_plan" }, PM);
   store.decideReview(sub.review.id, "approve", ENG, "Ventilation plan reviewed (synthetic)");
+  return { req, ENG };
+}
+
+test("approved requested document with an unresolved confirmed requirement renders (no tasks[0] crash)", async () => {
+  const { req, ENG } = await approvedVentilationWithOpenRequirement();
   const r = readiness("S-1001", "ahj_permit")!;
   const vent = r.items.find((i) => i.requirementId === "ventilation_plan")!;
   assert.equal(vent.state, "needs_eng_review");
   assert.equal(vent.action, "Resolve requirement");
   assert.match(vent.href, new RegExp(`/memory\\?project=S-1001&type=ahj_requirement&item=${encodeURIComponent(req.id)}`));
   assert.doesNotThrow(() => reviewQueue(ENG));
+});
+
+// Regression (Action Center "Resolve" did nothing): the finding's Resolve link targets the requirement card, a genuine
+// engineer resolution persists, the finding becomes "resolved" (not regenerated as open) and the gate stops blocking.
+test("Action Center Resolve: link targets the item, engineer resolution persists and clears the ventilation blocker", async () => {
+  const { req, ENG } = await approvedVentilationWithOpenRequirement();
+  const { resolveItem } = await import("../lib/memory/register");
+  const { packageReadiness } = await import("../lib/release");
+  const { TEMPLATE_BY_ID } = await import("../lib/requirements");
+  const f = findings(ENG).find((x) => x.id === `MEM-${req.id}`)!;
+  assert.equal(f.lifecycle, "action_required");
+  assert.equal(f.href, `/memory?project=S-1001&type=ahj_requirement&item=${encodeURIComponent(req.id)}`);
+  // The Action Center must remount on that same-route link (tab + focus come from the URL), or Resolve is unreachable.
+  const page = readFileSync("app/memory/page.tsx", "utf8");
+  assert.match(page, /<ActionCenter key=\{`\$\{project \?\? ""\}\|\$\{searchParams\.type \?\? ""\}\|\$\{searchParams\.item \?\? ""\}`\}/);
+  assert.throws(() => resolveItem("S-1001", req.id, PM, { note: "PM tries to resolve" }), /engineer/i, "only an engineer resolves a requirement");
+  resolveItem("S-1001", req.id, ENG, { note: "Ventilation plan Rev A answers Fire plan review comment 1 (synthetic)" });
+  const m = store.getSite("S-1001")!.memory!.find((x) => x.id === req.id)!;
+  assert.equal(m.status, "resolved");
+  assert.ok(m.resolvedRevisionId?.includes("ventilation_plan"), "resolution records the satisfying approved revision");
+  assert.equal(findings(ENG).find((x) => x.id === `MEM-${req.id}`)!.lifecycle, "resolved", "not regenerated as an open finding");
+  const gate = packageReadiness(store.getSite("S-1001")!, TEMPLATE_BY_ID.ahj_permit);
+  assert.ok(!gate.issues.some((i) => i.requirementId === "ventilation_plan"), JSON.stringify(gate.issues.filter((i) => i.requirementId === "ventilation_plan")));
+  assert.equal(readiness("S-1001", "ahj_permit")!.items.find((i) => i.requirementId === "ventilation_plan")!.state, "ready");
 });

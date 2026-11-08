@@ -122,6 +122,8 @@ function Stepper({ l }: { l: Lifecycle }) {
 /** Live Project Memory (Ashish's backend: /api/sites/:id/communications, /api/sites/:id/memory/:itemId). */
 function MemoryPanel({ ctx, project, status, q }: { ctx: MemoryContext; project: string; status: "open" | "closed" | "all"; q: string }) {
   const site = ctx.sites.find((x) => x.siteId === project) ?? ctx.sites.find((x) => x.siteId === "S-1001") ?? ctx.sites[0];
+  // Bring the linked item (e.g. from a finding's "Resolve →") into view.
+  useEffect(() => { if (ctx.focusItem) document.getElementById(`mem-${ctx.focusItem}`)?.scrollIntoView({ block: "center" }); }, [ctx.focusItem]);
   const [importOpen, setImportOpen] = useState(false);
   const shownSites = project ? ctx.sites.filter((x) => x.siteId === project) : ctx.sites.filter((x) => x.items.length > 0);
   const open = (m: MemoryItemView) => m.status === "suggested" || m.status === "confirmed";
