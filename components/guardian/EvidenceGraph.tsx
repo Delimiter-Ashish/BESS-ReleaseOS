@@ -2,6 +2,7 @@
 // Interactive evidence graph over GET /api/sites/:id/graph (Ashish's Project Guardian).
 // Layout is a deterministic honeycomb per lane; traversal is BFS over the returned edges (lib/graph-traversal.ts).
 // Nothing is inferred from position — every highlighted connection is a backend edge with its reason and evidence.
+import LocalTime from "@/components/LocalTime";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { EvidenceButton } from "@/components/evidence/EvidenceProvider";
@@ -162,7 +163,7 @@ export default function EvidenceGraph({ site, byRev, report, focusId, onFocus }:
             <div className="sticky bottom-0 left-0 flex flex-wrap gap-3 border-t border-slate-200 bg-night-900/95 px-3 py-2 text-[10px] text-slate-500">
               <span><span className="text-[#22d3ee]">━</span> upstream source</span><span><span className="text-[#fbbf24]">━</span> downstream impact</span>
               <span>Ring: <span className="text-[#a78bfa]">pending</span> · <span className="text-[#fbbf24]">open</span> · <span className="text-[#f87171]">rejected / discrepancy</span> · dashed = AI suggestion</span>
-              <span>{g.nodes.length} records · {g.edges.length} connections · built {new Date(g.builtAt).toLocaleTimeString()}</span>
+              <span>{g.nodes.length} records · {g.edges.length} connections · built <LocalTime iso={g.builtAt} mode="time" /></span>
             </div>
           </div>
         ) : (
@@ -190,7 +191,7 @@ export default function EvidenceGraph({ site, byRev, report, focusId, onFocus }:
                 <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-slate-500">
                   {focus.data?.status ? <span>Status: {String(focus.data.status).replace(/_/g, " ")}</span> : null}
                   {focus.data?.class ? <span>Classification: {String(focus.data.class).replace(/_/g, " ")}</span> : null}
-                  {focus.at && <span>{new Date(focus.at).toLocaleString()}</span>}
+                  {focus.at && <span><LocalTime iso={focus.at} /></span>}
                   {typeof focus.data?.sha256 === "string" && <span className="font-mono">sha {String(focus.data.sha256).slice(0, 10)}…</span>}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -266,7 +267,7 @@ function PlainList({ g, focusId, onFocus, q }: { g: Graph; focusId?: string; onF
             <button type="button" onClick={() => onFocus(e.from)} className="font-medium text-slate-900 hover:text-cyan-600">{nodes.get(e.from)?.label}</button>{" "}
             <span className="text-slate-500">{PHRASE[e.type] ?? e.type}</span>{" "}
             <button type="button" onClick={() => onFocus(e.to)} className="font-medium text-slate-900 hover:text-cyan-600">{nodes.get(e.to)?.label}</button>
-            <div className="text-[11px] text-slate-500">{e.reason}{e.at ? ` · ${new Date(e.at).toLocaleDateString()}` : ""}</div>
+            <div className="text-[11px] text-slate-500">{e.reason}{e.at ? <> · <LocalTime iso={e.at} mode="date" /></> : null}</div>
             {e.evidence && <div className="mt-0.5 text-[11px] italic text-slate-600">“{e.evidence}”</div>}
           </li>
         ))}

@@ -1,6 +1,7 @@
 "use client";
 // Reusable right-side evidence drawer. Any screen calls useEvidence().open(refs) — the page underneath keeps its
 // scroll position, filters and selection. The drawer renders the ORIGINAL stored document (never a mock-up).
+import LocalTime from "@/components/LocalTime";
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { EvidenceRef } from "@/lib/workspace";
@@ -121,7 +122,7 @@ function CommunicationEvidence({ c, quote }: { c: NonNullable<EvidenceRef["commu
     <div className="flex h-full flex-col">
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-slate-200 px-4 py-2 text-[11px] text-slate-500">
         <span><b className="text-slate-700">From</b> {c.sender ?? "—"}</span>
-        <span><b className="text-slate-700">Sent</b> {c.sentAt ? new Date(c.sentAt).toLocaleString() : "—"}</span>
+        <span><b className="text-slate-700">Sent</b> <LocalTime iso={c.sentAt} /></span>
         <span className="col-span-2 truncate"><b className="text-slate-700">Subject</b> {c.subject ?? "(none)"} · {c.channel?.replace("_", " ")}</span>
         <span>Imported by {state.meta?.importedBy} · {state.meta?.importedAt.slice(0, 16).replace("T", " ")}</span>
         <span className="truncate font-mono">sha256 {state.meta?.sha.slice(0, 16)}…</span>

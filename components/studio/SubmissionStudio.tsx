@@ -2,6 +2,7 @@
 // Submission Studio — Choose → Select → Arrange → Verify (Guardian preflight) → Engineer signoff → Assemble & seal.
 // Uses only real backends: POST /api/sites/:id/preflight (Guardian), POST /api/sites/:id/studio/check (gate + selection +
 // recipient authorization) and POST /api/sites/:id/studio/release (engineer signoff → real combined PDFs + sealed release).
+import LocalTime from "@/components/LocalTime";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -313,7 +314,7 @@ export default function SubmissionStudio(props: {
               <span className="ros-seal grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-[#5eead4] to-[#14b8a6] text-2xl text-night-950">✓</span>
               <div>
                 <div className="text-lg font-semibold text-ink">Release Sealed — {props.templateLabel} R{rel.number}</div>
-                <div className="text-xs text-ink-muted">{rel.id} · {new Date(rel.builtAt).toLocaleString()} · signed off by {rel.builtBy}</div>
+                <div className="text-xs text-ink-muted">{rel.id} · <LocalTime iso={rel.builtAt} /> · signed off by {rel.builtBy}</div>
                 <div className="font-mono text-[11px] text-ink-muted">manifest {rel.manifestSha256.slice(0, 20)}… · snapshot {rel.snapshotSha256?.slice(0, 20)}…</div>
               </div>
               <div className="ml-auto flex flex-wrap gap-2">
@@ -361,7 +362,7 @@ export default function SubmissionStudio(props: {
                 <li key={r.id} className="flex flex-wrap items-start gap-3 py-3">
                   <span className="font-mono text-sm font-semibold">R{r.number}</span>
                   <div className="min-w-0 flex-1 text-xs">
-                    <div className="text-slate-700">Sealed {new Date(r.builtAt).toLocaleString()} by {r.builtBy} · <span className="font-mono text-slate-500">{r.manifestSha256.slice(0, 12)}…</span></div>
+                    <div className="text-slate-700">Sealed <LocalTime iso={r.builtAt} /> by {r.builtBy} · <span className="font-mono text-slate-500">{r.manifestSha256.slice(0, 12)}…</span></div>
                     <div className="mt-0.5 flex flex-wrap gap-1">{r.items.map((i) => <span key={i.revisionId} className="rounded bg-slate-100 px-1.5 text-[11px] text-slate-600">{i.name} Rev {i.revLabel}</span>)}</div>
                     {r.reasons.map((x) => <div key={x} className="mt-0.5 text-[11px] text-amber-700">• {x}</div>)}
                   </div>
