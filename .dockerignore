@@ -1,0 +1,11 @@
+.git
+node_modules
+packages/release-core/node_modules
+.next
+.data
+.data-demo
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+coverage
