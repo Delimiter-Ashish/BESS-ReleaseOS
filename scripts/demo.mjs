@@ -5,6 +5,7 @@
 //   npm run demo:setup                 # reset THAT server and create the starting state via real API calls
 //   npm run demo:verify                # assert the starting state (or, after the walkthrough, the final state)
 //   npm run demo:advance               # optional: perform the resolution steps by API (rehearsal / fallback)
+//   DEMO_BASE=https://<public-host> DEMO_NO_RESET=1 npm run demo:setup   # fresh public deployment (reset disabled there)
 //
 // Every step below is an ordinary authenticated API call (same endpoints the UI uses). Nothing is mocked; extraction
 // uses OpenAI when .env.local configures it, otherwise the labeled deterministic fallback. All data is synthetic.
@@ -58,8 +59,15 @@ async function run(which) {
 
   if (which === "setup") {
     console.log(`Demo setup against ${BASE}`);
-    await must(call(pm, "/api/reset", { method: "POST" }), "reset demo server");
-    step("demo server reset to the synthetic seed (R1 sealed, historical)");
+    if (process.env.DEMO_NO_RESET === "1") {
+      // Public deployments disable reset: only allowed on a freshly seeded server (no communications imported yet).
+      const mem = await must(call(pm, `/api/sites/${H}/memory`), "memory");
+      if (mem.communications.length) throw new Error("DEMO_NO_RESET=1 requires a freshly seeded server (communications already exist)");
+      step("fresh seeded server detected (reset not used)");
+    } else {
+      await must(call(pm, "/api/reset", { method: "POST" }), "reset demo server");
+      step("demo server reset to the synthetic seed (R1 sealed, historical)");
+    }
     const com = await must(call(pm, `/api/sites/${H}/communications`, { method: "POST", json: { body: readFileSync("sample-docs/SYNTHETIC_AHJ_Email_Ventilation.txt", "utf8"), channel: "ahj_comment" } }), "import AHJ email");
     const req = com.items.find((i) => i.requirementId === "ventilation_plan");
     if (!req) throw new Error("the AHJ email did not yield a ventilation-plan requirement");

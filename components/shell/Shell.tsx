@@ -9,6 +9,8 @@ export interface ShellProps {
   users: ShellUser[];
   ai: { provider: string; keyed: boolean };
   badges: { reviews: number; actions: number; blocked: number; confirm: number; dependencies: number };
+  /** Public deployment: show the synthetic-demonstration banner and hide reset (RELEASEOS_PUBLIC_DEMO / RELEASEOS_DISABLE_RESET). */
+  deployment?: { publicDemo: boolean; resetDisabled: boolean };
   children: React.ReactNode;
 }
 type BadgeKey = keyof ShellProps["badges"];
@@ -113,7 +115,7 @@ function NavList({ groups, badges, onNavigate }: { groups: ReturnType<typeof nav
   );
 }
 
-export default function Shell({ session, users, ai, badges, children }: ShellProps) {
+export default function Shell({ session, users, ai, badges, deployment, children }: ShellProps) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   // Public first-responder QR view stays unbranded and outside the workspace.
@@ -139,7 +141,7 @@ export default function Shell({ session, users, ai, badges, children }: ShellPro
           <div className="font-semibold">Extraction: {ai.provider === "rules" ? "deterministic rules" : ai.keyed ? `${ai.provider === "openai" ? "OpenAI" : ai.provider} (live)` : `${ai.provider} — no key, rules fallback`}</div>
           <div className="text-ink-muted">AI proposes · people confirm · engineers approve.</div>
         </div>
-        <Identity session={session} users={users} />
+        <Identity session={session} users={users} resetDisabled={deployment?.resetDisabled} />
       </div>
     </nav>
   );
@@ -157,12 +159,15 @@ export default function Shell({ session, users, ai, badges, children }: ShellPro
           <aside className="relative h-full w-64">{nav}</aside>
         </div>
       )}
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0">
+        {deployment?.publicDemo && <div className="border-b border-[rgba(241,181,106,0.25)] bg-[rgba(241,181,106,0.08)] px-4 py-1.5 text-center text-[11px] text-[#fde68a]" role="note" data-testid="public-demo-banner">Synthetic demonstration for the MIT Energy &amp; Climate Hackathon — fictional projects and documents. Not a production regulatory compliance service; nothing here certifies code compliance.</div>}
+        {children}
+      </div>
     </div>
   );
 }
 
-function Identity({ session, users }: { session: ShellProps["session"]; users: ShellUser[] }) {
+function Identity({ session, users, resetDisabled }: { session: ShellProps["session"]; users: ShellUser[]; resetDisabled?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState("");
@@ -212,7 +217,7 @@ function Identity({ session, users }: { session: ShellProps["session"]; users: S
           </ul>
           <div className="mt-1 flex gap-1 border-t border-slate-200 pt-1">
             {signedIn && <button onClick={signOut} className="flex-1 rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-100">Sign out</button>}
-            <button onClick={reset} disabled={!!busy || session.role !== "eqore"} title={session.role !== "eqore" ? "EQORE roles only" : ""} className="flex-1 rounded-lg px-2 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 disabled:opacity-40">{busy === "reset" ? "Resetting…" : "Reset demo data"}</button>
+            {!resetDisabled && <button onClick={reset} disabled={!!busy || session.role !== "eqore"} title={session.role !== "eqore" ? "EQORE roles only" : ""} className="flex-1 rounded-lg px-2 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 disabled:opacity-40">{busy === "reset" ? "Resetting…" : "Reset demo data"}</button>}
           </div>
           <p className="px-2 pt-1 text-[10px] leading-snug text-slate-500">Identity lives in a server-signed httpOnly cookie. State is persisted on the server (RELEASEOS_DATA_DIR); reset restores the seed.</p>
         </div>

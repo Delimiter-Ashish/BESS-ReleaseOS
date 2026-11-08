@@ -277,6 +277,32 @@ Run `demo:setup` again for a clean take.
 
 The **intro** (`/intro`) is a skippable 4-second brand reveal. It is never auto-played over the app.
 
+## Deploy (public demonstration)
+
+ReleaseOS keeps state in JSON files on disk (`RELEASEOS_DATA_DIR`), so it needs a **persistent volume**. A
+stateless/serverless filesystem (e.g. default Vercel) would lose uploads, reviews and sealed releases. Run a single
+instance (the store is single-process).
+
+- **Railway** (`railway.json`): Node 22 (`.node-version`), `npm run build`, `npm start`, health check `/api/session`.
+  Attach a volume (e.g. mounted at `/data`).
+- **Render** (`render.yaml` Blueprint): a persistent disk requires a paid instance.
+
+| Variable | Value |
+|---|---|
+| `RELEASEOS_DATA_DIR` | path on the volume, e.g. `/data/releaseos` |
+| `SESSION_SECRET` | long random string (sessions survive restarts) |
+| `AI_PROVIDER` / `OPENAI_API_KEY` / `OPENAI_MODEL` | live extraction (key stays server-side) |
+| `RELEASEOS_PUBLIC_DEMO=1` | synthetic-demonstration banner |
+| `RELEASEOS_DISABLE_RESET=1` | demo passcodes are public, so nobody may reset the shared store |
+
+After the first boot (seeded synthetic portfolio):
+
+```bash
+DEMO_BASE=https://<host> DEMO_NO_RESET=1 npm run demo:setup
+```
+
+This creates the demo start state through the public API.
+
 ## Persistence
 
 Every mutation writes `RELEASEOS_DATA_DIR/state.json` atomically (default `./.data`, git-ignored); uploaded bytes

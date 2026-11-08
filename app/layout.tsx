@@ -46,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             users={DEMO_USERS.map(({ id, name, title, engineer, passcode }) => ({ id, name, title, engineer, passcode }))}
             ai={{ provider, keyed }}
             badges={badges}
+            deployment={{ publicDemo: process.env.RELEASEOS_PUBLIC_DEMO === "1", resetDisabled: process.env.RELEASEOS_DISABLE_RESET === "1" }}
           >
             {children}
           </Shell>

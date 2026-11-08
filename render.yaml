@@ -1,0 +1,31 @@
+# Render Blueprint (alternative to Railway). A persistent disk requires a paid instance type.
+services:
+  - type: web
+    name: releaseos
+    runtime: node
+    plan: starter
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/session
+    disk:
+      name: releaseos-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: RELEASEOS_DATA_DIR
+        value: /var/data/releaseos
+      - key: RELEASEOS_PUBLIC_DEMO
+        value: "1"
+      - key: RELEASEOS_DISABLE_RESET
+        value: "1"
+      - key: AI_PROVIDER
+        value: openai
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        sync: false
