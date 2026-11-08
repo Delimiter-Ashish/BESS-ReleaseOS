@@ -11,14 +11,14 @@ export const dynamic = "force-dynamic";
 /** Readiness for every package (deterministic gate + optimistic token). */
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   return handle(() => {
-    requireCap(req, "read_private");
+    const session = requireCap(req, "read_private");
     const site = getSite(params.id);
     if (!site) throw new StoreError(404, "site not found");
     return NextResponse.json({
       ok: true,
       packages: PACKAGE_TEMPLATES.map((t) => {
         const r = packageReadiness(site, t);
-        return { templateId: t.id, name: t.name, canBuild: r.canBuild, token: r.token, issues: r.issues, items: r.items.map((i) => ({ requirementId: i.requirementId, name: i.name, state: i.state, approved: i.approved?.revLabel ?? null, pending: i.pending?.revLabel ?? null, openTasks: i.tasks.map((t) => t.id) })) };
+        return { templateId: t.id, name: t.name, canBuild: r.canBuild, token: r.token, issues: session.role === "eqore" ? r.issues : r.issues.map((i) => (i.source ? { ...i, source: { ...i.source, evidence: undefined } } : i)), advisories: r.advisories, items: r.items.map((i) => ({ requirementId: i.requirementId, name: i.name, state: i.state, approved: i.approved?.revLabel ?? null, pending: i.pending?.revLabel ?? null, openTasks: i.tasks.map((t) => t.id) })) };
       }),
     });
   });

@@ -223,6 +223,9 @@ export interface Site {
   // ---- additive (integration) ----
   engTasks?: EngineeringTask[];
   decisions?: DecisionRecord[];
+  // ---- additive (project memory; see lib/memory/types.ts) ----
+  communications?: import("./memory/types").Communication[];
+  memory?: import("./memory/types").MemoryItem[];
 }
 
 export interface User {

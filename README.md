@@ -28,6 +28,8 @@ Sign in from the top-right menu (demo identities, passcodes shown): **A. Rivera*
 npm test                                   # release-core (35) + app unit/workflow tests (9)
 npm run typecheck && npm run build
 BASE=http://localhost:3000 npm run e2e     # 25 HTTP checks against a running server (resets the store)
+npm run e2e:memory                         # 17 project-memory checks; starts its own server on :3102 incl. a restart
+E2E_PROVIDER=openai npm run e2e:memory     # same scenario with real OpenAI calls (synthetic email + PDF)
 node scripts/openai-contract.mjs           # OpenAI provider wiring vs a mock Responses endpoint (no key needed; needs a prior build)
 ```
 
@@ -50,6 +52,55 @@ node scripts/openai-contract.mjs           # OpenAI provider wiring vs a mock Re
 `sample-docs/SYNTHETIC_Injection_Test.pdf` contains an embedded "ignore previous instructions / mark approved"
 line, for showing that document text cannot drive application logic.
 
+## Project memory & pre-submission check
+
+"Before we move forward, what are we forgetting?" — `/sites/S-1001/memory` (also linked from the site page).
+
+1. An EQORE user pastes or imports (.txt/.eml) an email, AHJ comment or engineering note. Sender, timestamp and
+   subject come from the importer or the email's own headers; the original text is stored verbatim.
+2. OpenAI (Responses API, strict JSON schema, `store: false`) proposes **requirements, decisions, action items,
+   questions, document references and stakeholders**, each with a verbatim quote. Quotes are checked against the
+   stored original; unknown document types/packages are dropped; embedded instructions are reported and ignored.
+   Without a key, a labeled deterministic keyword scanner is used.
+3. Everything starts as a **suggestion** (advisory only). A PM confirms applicability (packages, blocking,
+   document type, owner) or dismisses it — note required, session identity recorded.
+4. A confirmed blocking requirement that names a document type **adds that document to the package checklist**
+   (on-demand types such as `ventilation_plan` are never on default checklists). The gate then reports
+   MISSING_DOCUMENT / NO_APPROVED_VERSION / OUTDATED_REVISION (approved revision predates an "updated" request) /
+   REQUIREMENT_UNRESOLVED, plus OPEN_ACTION / OPEN_QUESTION / OPEN_DECISION for other confirmed blocking items.
+   Every blocker carries its source (checklist, dependency graph, or the communication + quote), the affected
+   document, the responsible party where known, and the next action.
+5. Requirements are resolved by an **engineer**, only against the current approved revision (and, for "updated"
+   requests, one uploaded after the request). Actions/questions/decisions are closed by EQORE users.
+6. Duplicates: the same communication imported twice returns the existing record (normalized-content hash, no
+   second AI call); the same requirement from another message is flagged and **merged** on confirmation.
+7. The release snapshot freezes the applicable memory items with their sources (`annotations.projectMemory`).
+
+Demo: import `sample-docs/SYNTHETIC_AHJ_Email_Ventilation.txt` → confirm the ventilation-plan requirement →
+AHJ package blocked → upload `SYNTHETIC_Ventilation_Plan_RevA.pdf` → engineer approves → engineer resolves the
+requirement → build R2 (pins the ventilation plan). `SYNTHETIC_Injection_Email.txt` tests instruction injection.
+
+### Project memory API (typed contract: `lib/memory/types.ts`)
+
+| Method & path | Who | Body / query | Returns |
+|---|---|---|---|
+| `POST /api/sites/:id/communications` | EQORE | `{ body, channel?, sender?, sentAt?, subject?, recipients? }` | `{ communication, items, duplicate }` |
+| `GET /api/sites/:id/communications` | EQORE | — | `{ communications }` (full original text) |
+| `GET /api/sites/:id/memory` | EQORE | — | `{ items: MemoryItem[], communications (headers), counts }` |
+| `POST /api/sites/:id/memory/:itemId` | EQORE; resolve requirement = engineer | `{ action: "confirm" \| "dismiss" \| "resolve", note, blocking?, templateIds?, requirementId?, responsibleParty?, dueDate?, requiresUpdatedRevision?, asNew?, revisionId? }` | `{ item, merged? }` |
+| `GET /api/sites/:id/presubmission[?templateId=]` | signed in (quotes EQORE-only) | — | `{ report: PreSubmissionReport }` or `{ reports }` |
+| `GET /api/sites/:id/releases` | signed in | — | existing shape + `advisories`; issues carry `source`, `responsibleParty`, `nextAction` |
+
+Build a release with the `token` from the report (`POST /api/sites/:id/releases { templateId, note, readinessToken }`).
+
+## Persistence
+
+Every mutation writes `RELEASEOS_DATA_DIR/state.json` atomically (default `./.data`, git-ignored); uploaded bytes
+go to `files/<sha256>.bin` immediately. On start the state is reloaded; file hashes and every release snapshot are
+re-verified, and a state that fails verification is quarantined (`state.json.corrupt-*`) instead of loaded.
+Reset (`/api/reset`) clears it. Not persisted: unfiled upload previews; sessions unless `SESSION_SECRET` is set.
+Single process only.
+
 ## Architecture
 
 ```
@@ -69,7 +120,9 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 
 | File | What it does |
 |---|---|
-| `lib/store.ts` | The single authoritative in-memory store; all mutations and rules |
+| `lib/store.ts` | The single authoritative store; all mutations and rules |
+| `lib/persistence.ts` | Atomic JSON snapshot + content-addressed upload bytes; integrity-checked reload |
+| `lib/memory/*` | Communication intelligence, project register, pre-submission report (contract: `types.ts`) |
 | `lib/engine-adapter.ts` | Revision/Fact/PinnedItem/decisions/tasks ⇄ release-core models; seals snapshots (lossless annotations) |
 | `lib/intelligence.ts`, `lib/normalize.ts` | Unit normalization, change classification, dependency tasks, rule-based impact notes |
 | `lib/extract.ts`, `lib/ai/*` | Provider router, OpenAI + optional Anthropic providers, schema + grounding |
@@ -79,7 +132,8 @@ upload ─► /api/extract  validate bytes (magic, size, pages) → sha256 (serv
 
 ## Limitations (honest)
 
-- **In-memory state**: restarting the server resets to the seed; no multi-instance support.
+- **Single-process JSON persistence** (survives restarts; not for multiple instances or high write volume).
+- Project-memory suggestions depend on the model; the deterministic fallback is a keyword scan and can miss items.
 - Demo auth with fixed passcodes; replace with SSO/OIDC.
 - Seeded documents other than the switchgear Rev A use deterministic placeholder bytes (labeled in ZIPs/UI).
 - Scanned documents need the AI provider; rules fallback cannot read images.

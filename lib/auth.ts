@@ -84,7 +84,7 @@ export class AuthError extends Error {
   }
 }
 
-export type Capability = "upload" | "review" | "release" | "read_private" | "reset";
+export type Capability = "upload" | "review" | "release" | "read_private" | "reset" | "memory";
 export function can(s: Session, cap: Capability) {
   switch (cap) {
     case "upload":
@@ -93,6 +93,7 @@ export function can(s: Session, cap: Capability) {
     case "release":
       return s.engineer;
     case "reset":
+    case "memory": // import communications, read/confirm/dismiss/resolve project memory (internal EQORE data)
       return s.role === "eqore";
     case "read_private":
       return s.role !== "public";

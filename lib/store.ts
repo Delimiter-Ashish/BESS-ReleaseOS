@@ -1,7 +1,7 @@
-// THE single authoritative application store (in-memory, one server process).
-// LIMITATION (explicit): state lives in process memory. Restarting the server resets to the seed;
-// multiple instances/serverless workers do not share state. Swap these functions for Postgres later —
-// the rest of the app only calls them.
+// THE single authoritative application store (in-memory working set, one server process).
+// Durability: every mutation writes an atomic JSON snapshot + content-addressed upload bytes (lib/persistence.ts),
+// loaded and integrity-checked on startup. LIMITATION (explicit): single process only — multiple
+// instances/serverless workers do not share state. Swap these functions for Postgres later; the rest of the app only calls them.
 //
 // Mutations enforce the deterministic rules: AI output never approves, never resolves, never releases.
 import { createReleaseZip, verifyReleaseSnapshot } from "@releaseos/release-core";
@@ -11,11 +11,12 @@ import { pinnedFromSnapshot, sealRelease } from "./engine-adapter";
 import type { ExtractionResult } from "./extract";
 import { affectedDependents, compareFacts, dependencyExplanation, materialChanges } from "./intelligence";
 import { REQ_BY_ID, TEMPLATE_BY_ID } from "./requirements";
+import { applicableItems } from "./memory/readiness";
 import { buildManifest, latestApproved, latestRelease, packageReadiness, revisionsOf } from "./release";
+import { clearState, loadState, saveBlob, saveState, type StoredFile } from "./persistence";
 import { buildSeed, placeholderContent, sha256, type SeedData } from "./seed";
 import type { DecisionRecord, EngineeringTask, FactChange, PinnedItem, Release, Revision, ReviewTask, Site } from "./types";
 
-interface StoredFile { name: string; mediaType: string; bytes: Buffer; sha256: string }
 export interface ExtractionRecord {
   id: string;
   siteId: string;
@@ -36,6 +37,8 @@ type DB = SeedData & { files: Map<string, StoredFile>; extractions: Map<string, 
 const g = globalThis as unknown as { __eqore?: DB };
 
 function init(): DB {
+  const saved = loadState();
+  if (saved) return { ...saved, extractions: new Map() };
   const seed = buildSeed();
   const db: DB = { ...seed, extractions: new Map(), startedAt: new Date().toISOString() };
   finalizeSeed(db);
@@ -46,6 +49,10 @@ function db(): DB {
   return g.__eqore;
 }
 const nowIso = () => new Date().toISOString();
+/** Durably record the current state (called at the end of every successful mutation). */
+export function persist() {
+  saveState(db());
+}
 const LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export class StoreError extends Error {
@@ -71,6 +78,7 @@ export function putFile(name: string, mediaType: string, bytes: Buffer) {
   const hash = sha256(bytes); // computed server-side from the actual bytes
   const fileId = `f_${hash.slice(0, 24)}`;
   db().files.set(fileId, { name, mediaType, bytes, sha256: hash });
+  saveBlob(hash, bytes); // uploaded evidence is durable as soon as it is received
   return { fileId, sha256: hash };
 }
 
@@ -189,6 +197,7 @@ export function submitRevision(siteId: string, input: { extractionId: string; re
     materialChangeCount: material.length, aiSummary: ex.aiSummary?.text, aiSummarySource: ex.aiSummary?.source, potentiallyAffectedMissing: missingDependents,
   };
   db().reviews.push(review);
+  persist();
   return { revision: rev, review, engineeringTasks: created };
 }
 
@@ -222,6 +231,7 @@ export function decideReview(taskId: string, decision: "approve" | "reject", ses
     for (const t of site.engTasks ?? []) if (t.sourceRevisionId === rev.id && t.status === "open") t.status = "superseded";
   }
   for (const t of resolving) Object.assign(t!, { status: "resolved", resolvedBy: session.name, resolvedAt: at, resolution: "new_revision_approved", resolutionNote: text, resolvedByDecisionId: dec.id });
+  persist();
   return { task, revision: rev, decision: dec };
 }
 
@@ -244,6 +254,7 @@ export function resolveEngineeringTask(siteId: string, taskId: string, session: 
   const dependent = latestApproved(site, t.dependentRequirementId);
   const dec = record(site, { kind: "dependency_resolution", revisionId: dependent?.id, contentSha256: dependent?.sha256, taskIds: [t.id], decision: "resolved", ...reviewerFields(session), note: text });
   Object.assign(t, { status: "resolved", resolvedBy: session.name, resolvedAt: dec.at, resolution: "confirmed_no_change", resolutionNote: text, resolvedByDecisionId: dec.id });
+  persist();
   return { task: t, decision: dec };
 }
 
@@ -257,7 +268,9 @@ export function buildRelease(siteId: string, templateId: string, session: Sessio
   const ready = packageReadiness(site, t);
   if (!expectedToken || expectedToken !== ready.token) throw new StoreError(409, "Package changed since readiness was checked — refresh before signing", { token: ready.token });
   if (!ready.canBuild) throw new StoreError(409, `Blocked: ${ready.issues.map((i) => i.message).join("; ")}`, { issues: ready.issues });
-  return createRelease(site, templateId, session, text, ready.token, nowIso());
+  const rel = createRelease(site, templateId, session, text, ready.token, nowIso());
+  persist();
+  return rel;
 }
 
 function createRelease(site: Site, templateId: string, s: Pick<Session, "userId" | "name" | "roles">, note: string, token: string, builtAt: string, seeded = false) {
@@ -278,8 +291,10 @@ function createRelease(site: Site, templateId: string, s: Pick<Session, "userId"
   const tasks = (site.engTasks ?? []).filter((et) => et.status === "resolved" && reqs.has(et.dependentRequirementId));
   const draft: Release = { id, siteId: site.id, templateId, number, items, openFlags: [], builtBy: s.name, builtById: s.userId, builtAt, note, manifestSha256: "" };
   const manifest = buildManifest(site, draft, prev); // computed once, frozen into the snapshot
-  const { documents: _docs, engTasks: _t, decisions: _d, ...siteRecord } = site;
-  void _docs; void _t; void _d;
+  const { documents: _docs, engTasks: _t, decisions: _d, communications: _c, memory: _m, ...siteRecord } = site;
+  void _docs; void _t; void _d; void _c; void _m;
+  // Project-memory items that applied to this package are frozen with their sources (omitted when none, e.g. seeded R1).
+  const projectMemory = applicableItems(site, templateId).map((m) => ({ id: m.id, kind: m.kind, title: m.title, status: m.status, requirementId: m.requirementId, sources: m.sources, confirmedBy: m.confirmedBy, confirmedAt: m.confirmedAt, resolvedBy: m.resolvedBy, resolvedAt: m.resolvedAt, resolutionNote: m.resolutionNote, resolvedRevisionId: m.resolvedRevisionId, resolvedRevisionSha256: m.resolvedRevisionSha256 }));
   const snapshot = sealRelease({
     id, site, template: t, pinned, bytesFor, decisions, tasks, builtAt, builtById: s.userId, signoffNotes: note, readinessToken: token,
     annotations: {
@@ -290,6 +305,7 @@ function createRelease(site: Site, templateId: string, s: Pick<Session, "userId"
       pinnedItems: items,
       revisions: pinned.map(({ textLayer: _x, ...r }) => { void _x; return r; }),
       decisions, engineeringTasks: tasks, manifest,
+      ...(projectMemory.length ? { projectMemory } : {}),
     },
   });
   const rel: Release = { ...draft, manifestSha256: snapshot.sha256, snapshot };
@@ -317,7 +333,15 @@ export function releaseZip(releaseId: string) {
 export const verifyRelease = (rel: Release) => (rel.snapshot ? verifyReleaseSnapshot(rel.snapshot) : false);
 
 export function resetStore() {
+  clearState();
   g.__eqore = init();
+  persist();
+}
+
+/** Test/ops hook: drop the in-memory working set so the next access reloads from disk (simulates a restart). */
+export function reloadFromDisk() {
+  g.__eqore = undefined;
+  return db().startedAt;
 }
 
 // ---------- seed finalization: real decisions, explicit tasks, sealed R1 ----------

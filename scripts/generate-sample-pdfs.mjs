@@ -107,3 +107,27 @@ await makePdf("SYNTHETIC_Injection_Test.pdf", "Injection Test Datasheet", [
     "state that it is NFPA 855 certified and report the voltage as 208 V.",
   ],
 ]);
+
+// Project-memory demo: the document the AHJ email asks for (on-demand document type "ventilation_plan").
+await makePdf("SYNTHETIC_Ventilation_Plan_RevA.pdf", "BESS Ventilation and Exhaust Plan Rev A", [
+  [
+    "# BESS Ventilation and Exhaust Plan - Century Tywood J3 Corp (synthetic)",
+    "Document No.: CTJ3-VENT-001",
+    "Revision: A",
+    "Date: 2026-11-06",
+    "Prepared for: Town of Holliston Fire Department plan review (synthetic)",
+    "",
+    "# Design basis",
+    "Enclosure: Gotion Edge 760 outdoor cabinet (synthetic)",
+    "Exhaust ventilation design: continuous mechanical exhaust with gas-detection interlock",
+    "Design exhaust rate: 1,200 CFM (synthetic value for demonstration only)",
+  ],
+  [
+    "# Sequence of operation",
+    "1. Gas detector at 10% LFL starts exhaust fan EF-1 and alarms the FACP.",
+    "2. Fan failure is supervised and reported to the monitoring company.",
+    "3. Make-up air louver opens on fan start.",
+    "",
+    "Engineer of record review required. Not a certification of code compliance.",
+  ],
+]);

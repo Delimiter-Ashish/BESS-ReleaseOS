@@ -3,7 +3,7 @@
 // against the PDF text layer before anything is stored.
 import { FACT_KEYS } from "../facts";
 import { findQuotePage, type TextLayer } from "../pdf";
-import { REQUIREMENTS } from "../requirements";
+import { DOCUMENT_TYPES as REQUIREMENTS } from "../requirements";
 import type { Fact } from "../types";
 
 export const SYSTEM_INSTRUCTIONS = `You are a document-control assistant for commercial & industrial battery energy storage (BESS) projects.

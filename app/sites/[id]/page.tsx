@@ -82,7 +82,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
     <>
       <AppHeader />
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="text-sm text-slate-500"><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500"><span><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</span><Link href={`/sites/${site.id}/memory`} className="pill bg-indigo-50 text-indigo-700 ring-indigo-200 hover:bg-indigo-100">Project memory &amp; pre-submission check →</Link></div>
 
         <section className="card flex flex-wrap items-start justify-between gap-6 p-5">
           <div className="space-y-1">
