@@ -1,19 +1,13 @@
-// Deterministic synthetic portfolio — messy on purpose (missing docs, stale logs,
-// documents awaiting review). Hero site S-1001 uses the STRUCTURE of the sponsor's
-// Century Tywood sample plan set; supplier documents and ratings are synthetic.
+// Deterministic synthetic portfolio, seeded from the CSV dataset in data/demo/ (see its README).
+// Hero site S-1001 uses the STRUCTURE of the sponsor's Century Tywood sample plan set; supplier
+// documents and ratings are synthetic. After start-up the in-memory store is the only source of truth.
 import { createHash } from "crypto";
 import { readFileSync } from "fs";
-import { join } from "path";
-import { REQUIREMENTS, STAGES, stageIndex, type StageId } from "./requirements";
+import { basename, join } from "path";
+import { loadDocuments, loadFacts, loadProjects, partiesFor } from "./demo-data";
+import { compareFacts, materialChanges } from "./intelligence";
+import { REQUIREMENTS, stageIndex } from "./requirements";
 import type { Fact, Release, Revision, ReviewTask, Site } from "./types";
-
-function rng(seed: number) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
 
 export const TODAY = new Date();
 const day = 86400000;
@@ -57,23 +51,6 @@ function rev(
   };
 }
 
-const MA_TOWNS = ["Holliston", "Framingham", "Worcester", "Lowell", "Woburn", "Marlborough", "Taunton", "Fall River", "Brockton", "Springfield", "Chicopee", "Billerica", "Canton", "Norwood", "Hopkinton", "Milford", "Fitchburg", "Haverhill", "Peabody", "Wilmington"];
-const CA_TOWNS = ["Fremont", "Hayward", "San Jose", "Oakland", "Richmond", "Union City", "Milpitas", "Santa Clara", "Sunnyvale", "San Leandro", "Newark", "Livermore"];
-const BUSINESSES = ["Precision Machining", "Plastics", "Cold Storage", "Metal Works", "Food Processing", "Packaging", "Fabrication", "Textiles", "Bottling", "Coatings", "Electronics Assembly", "Bakery", "Printing", "Tool & Die", "Brewing", "Logistics Center"];
-const PREFIX = ["Atlas", "Granite", "Harbor", "Summit", "Pioneer", "Keystone", "Liberty", "Northfield", "Bayview", "Redwood", "Cedar", "Ironside", "Crescent", "Union", "Valley", "Beacon"];
-const STREETS = ["Industrial Dr", "Commerce Way", "Mill St", "Depot Rd", "Technology Pkwy", "River Rd", "Elm St", "Main St"];
-const SYSTEMS = [
-  { vendor: "Sungrow PowerTitan", chem: "LFP (lithium iron phosphate)", kw: 250, kwh: 500 },
-  { vendor: "Tesla Megapack 2", chem: "LFP (lithium iron phosphate)", kw: 1000, kwh: 3900 },
-  { vendor: "BYD Battery-Box Premium", chem: "LFP (lithium iron phosphate)", kw: 60, kwh: 120 },
-  { vendor: "Generac SBE", chem: "LFP (lithium iron phosphate)", kw: 125, kwh: 250 },
-  { vendor: "Gotion Edge 760", chem: "LFP (lithium iron phosphate)", kw: 250, kwh: 760 },
-];
-const STAGE_WEIGHTS: [StageId, number][] = [
-  ["contract", 4], ["intake", 6], ["design", 8], ["procurement", 6], ["interconnection", 6], ["permitting", 10],
-  ["installation", 4], ["commissioning", 5], ["pto", 5], ["operations", 42], ["decommissioning", 4],
-];
-
 export interface SeedData {
   sites: Site[];
   reviews: ReviewTask[];
@@ -91,101 +68,52 @@ function sampleBytes(name: string) {
   }
 }
 
-export function buildSeed(count = 84): SeedData {
-  const r = rng(855);
-  const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
-  const sites: Site[] = [];
+export function buildSeed(): SeedData {
+  const files: SeedData["files"] = new Map();
+  const attach = (rel: string) => {
+    const bytes = sampleBytes(rel);
+    const hash = sha256(bytes);
+    const fileId = `f_${hash.slice(0, 24)}`;
+    files.set(fileId, { name: basename(rel), mediaType: "application/pdf", bytes, sha256: hash });
+    return { fileName: basename(rel), fileId, sha256: hash, mediaType: "application/pdf" };
+  };
 
-  for (let i = 0; i < count; i++) {
-    const isMA = r() < 0.7;
-    const city = isMA ? pick(MA_TOWNS) : pick(CA_TOWNS);
-    const sys = pick(SYSTEMS);
-    const units = sys.kwh > 1000 ? 1 : 1 + Math.floor(r() * 2);
-    let acc = 0;
-    const roll = r() * 100;
-    let stage: StageId = "operations";
-    for (const [s, w] of STAGE_WEIGHTS) {
-      acc += w;
-      if (roll < acc) { stage = s; break; }
-    }
-    const si = stageIndex(stage);
-    const id = `S-${String(1001 + i)}`;
-    const opsAgeDays = stage === "operations" || stage === "decommissioning" ? 60 + Math.floor(r() * 900) : 0;
+  // ===== Projects (data/demo/projects.csv) =====
+  const sites: Site[] = loadProjects().map((p) => ({
+    id: p.id, name: p.name, address: p.address, city: p.city, state: p.state, utility: p.utility, ahj: p.ahj, stage: p.stage,
+    chemistry: p.chemistry, powerKw: p.powerKw, energyKwh: p.energyKwh, vendor: p.vendor, inverter: p.inverter,
+    location: p.location, disconnectLocation: p.disconnectLocation,
+    installDate: p.installDaysAgo !== undefined ? daysAgo(p.installDaysAgo) : undefined,
+    documents: [], events: [],
+    contacts: partiesFor(p.id).filter((x) => /emergency|24\/7/i.test(x.role)).map((x) => ({ role: x.role, name: x.name, phone: x.phone })),
+  }));
+  const siteById = (id: string) => {
+    const s = sites.find((x) => x.id === id);
+    if (!s) throw new Error(`demo dataset: unknown project ${id}`);
+    return s;
+  };
 
-    const documents: Revision[] = [];
-    for (const req of REQUIREMENTS) {
-      const ri = stageIndex(req.stage);
-      if (req.stage === "decommissioning" && stage !== "decommissioning") continue;
-      if (ri > si) continue;
-      const missingP = ri === si ? 0.45 : req.optional ? 0.4 : 0.05;
-      if (r() < missingP) continue;
-      const stageOffset = (STAGES.length - ri) * 25;
-      let ageDays = Math.max(5, stageOffset + opsAgeDays * 0.3 - Math.floor(r() * 20));
-      if (req.recurrenceDays) {
-        ageDays = r() < 0.75 ? Math.floor(r() * (req.recurrenceDays - 20)) : req.recurrenceDays + Math.floor(r() * 200);
-        if (opsAgeDays && ageDays > opsAgeDays) ageDays = opsAgeDays;
-      }
-      const n = 1 + Math.floor(r() * 2);
-      const roll2 = r();
-      documents.push(
-        rev(id, req.id, n, daysAgo(Math.round(ageDays)), {
-          status: roll2 < 0.05 ? "in_review" : "approved",
-          source: ["procurement"].includes(req.stage) ? "supplier" : "eqore",
-        }),
-      );
-    }
-
-    sites.push({
-      id,
-      name: `${pick(PREFIX)} ${pick(BUSINESSES)}`,
-      address: `${10 + Math.floor(r() * 980)} ${pick(STREETS)}, ${city}, ${isMA ? "MA" : "CA"}`,
-      city,
-      state: isMA ? "MA" : "CA",
-      utility: isMA ? (r() < 0.5 ? "National Grid" : "Eversource") : "PG&E",
-      ahj: `${city} Fire Department / Building Dept`,
-      stage,
-      chemistry: sys.chem,
-      powerKw: sys.kw * units,
-      energyKwh: sys.kwh * units,
-      vendor: `${sys.vendor}${units > 1 ? ` ×${units}` : ""}`,
-      location: pick(["Outdoor pad, north side of building", "Outdoor pad near loading dock", "Dedicated ESS room, ground floor", "Outdoor enclosure behind main switchgear"]),
-      disconnectLocation: pick(["Exterior wall next to main switchgear", "On ESS pad, red-labeled AC disconnect", "Electrical room door, left side"]),
-      installDate: si >= stageIndex("installation") ? daysAgo(opsAgeDays + 30) : undefined,
-      documents,
-      events: [],
-      contacts: [
-        { role: "Facility emergency contact", name: pick(["Dana Murphy", "Luis Ortega", "Priya Nair", "Tom Walsh", "Grace Kim"]), phone: `(${isMA ? "508" : "510"}) 555-0${100 + Math.floor(r() * 899)}` },
-        { role: "EQORE 24/7 response", name: "EQORE NOC", phone: "(617) 555-0199" },
-      ],
-    });
+  // ===== Received documents (data/demo/documents.csv + facts.csv) =====
+  const factRows = loadFacts();
+  for (const d of loadDocuments()) {
+    const facts: Fact[] = factRows
+      .filter((x) => x.projectId === d.projectId && x.requirementId === d.requirementId && x.rev === d.rev)
+      .map((x) => ({ key: x.key, label: x.label, value: x.value, unit: x.unit, evidence: x.evidence, page: x.page, confidence: 0.9, status: "found", origin: "seed", note: x.evidence ? "Seeded fact — quote copied from the synthetic PDF text" : "Seeded value — no source file on record" }));
+    const n = LABELS.indexOf(d.rev) + 1;
+    if (n < 1) throw new Error(`documents.csv: unsupported revision label ${d.rev}`);
+    siteById(d.projectId).documents.push(rev(d.projectId, d.requirementId, n, daysAgo(d.daysAgo), {
+      status: d.status, source: d.source as Revision["source"], uploadedBy: d.uploadedBy, facts, notes: d.note,
+      ...(d.file ? attach(d.file) : {}),
+    }));
   }
 
   // ===== Hero site: Century Tywood (structure from sponsor sample plan set) =====
   const H = "S-1001";
-  const hero = sites[0];
-  Object.assign(hero, {
-    name: "Century Tywood J3 Corp",
-    address: "79 Lowland St, Holliston, MA 01747",
-    city: "Holliston",
-    state: "MA",
-    utility: "Eversource",
-    ahj: "Town of Holliston (Building + Fire)",
-    stage: "permitting",
-    chemistry: "LFP (lithium iron phosphate)",
-    powerKw: 250,
-    energyKwh: 760,
-    vendor: "Gotion Edge 760",
-    inverter: "2 × Dynapower MPS125",
-    location: "Outdoor pad, west side of building (per site plan ESS-2.0)",
-    disconnectLocation: "AC disconnect next to main distribution panel (point of interconnection)",
-    installDate: undefined,
-    events: [],
-  } satisfies Partial<Site>);
+  const hero = siteById(H);
 
   const f = (key: string, label: string, value: string, unit: string | undefined, evidence: string, page: number): Fact => ({ key, label, value, unit, evidence, page, confidence: 0.95 });
   // Facts for the real Rev A PDF: verbatim quotes and pages from its text layer.
   const v = (key: string, label: string, value: string, unit: string | undefined, evidence: string, page: number): Fact => ({ key, label, value, unit, evidence, page, confidence: 0.95, status: "found", evidenceVerified: true, pageVerified: true, origin: "seed" });
-  const files: SeedData["files"] = new Map();
   const swBytes = sampleBytes(HERO_SWITCHGEAR_A);
   const swHash = sha256(swBytes);
   const swFileId = `f_${swHash.slice(0, 24)}`;
@@ -243,29 +171,33 @@ export function buildSeed(count = 84): SeedData {
   releases.push(r1);
 
   // Second showcase site (operating) for the QR / NFPA 855 lifecycle demo
-  const ops = sites[1];
-  ops.name = "Atlas Cold Storage";
-  ops.stage = "operations";
+  const ops = siteById("S-1002");
   ops.documents = REQUIREMENTS.filter((q) => q.stage !== "decommissioning" && q.id !== "training_drill").map((q) =>
     rev(ops.id, q.id, 1, daysAgo(q.recurrenceDays ? (q.id === "ops_record" ? 400 : 200) : 500 - stageIndex(q.stage) * 20), { source: "eqore" }),
   );
 
-  // Every seeded in-review revision gets an open review task
+  // Every seeded in-review revision gets an open review task, compared against the previous approved revision.
   const reviews: ReviewTask[] = sites.flatMap((s) =>
     s.documents
       .filter((d) => d.status === "in_review")
-      .map((d) => ({
-        id: `RV-${d.id}`,
-        siteId: s.id,
-        revisionId: d.id,
-        requirementId: d.requirementId,
-        changes: [],
-        affectedReleaseIds: [],
-        affectedRequirementIds: [],
-        assignee: "EQORE engineer",
-        status: "open" as const,
-        createdAt: `${d.uploadedAt}T12:00:00Z`,
-      })),
+      .map((d) => {
+        const prev = s.documents.filter((x) => x.requirementId === d.requirementId && x.status === "approved" && x.version < d.version).sort((a, b) => b.version - a.version)[0];
+        const changes = prev ? compareFacts(prev.facts, d.facts) : [];
+        return {
+          id: `RV-${d.id}`,
+          siteId: s.id,
+          revisionId: d.id,
+          previousRevisionId: prev?.id,
+          requirementId: d.requirementId,
+          changes,
+          affectedReleaseIds: [],
+          affectedRequirementIds: [],
+          assignee: "EQORE engineer",
+          status: "open" as const,
+          createdAt: `${d.uploadedAt}T12:00:00Z`,
+          materialChangeCount: materialChanges(changes).length,
+        };
+      }),
   );
   return { sites, reviews, releases, files };
 }

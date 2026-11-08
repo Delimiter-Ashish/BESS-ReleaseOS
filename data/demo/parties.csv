@@ -1,0 +1,15 @@
+project_id,role,name,organization,phone,responsible_for
+*,Project manager,A. Rivera,EQORE,(617) 555-0142,contract;proposal;intake;interconnection;permitting;pto;operations
+*,Engineer of record,R. Patel PE,EQORE,(617) 555-0151,plan_set;design;commissioning
+*,Electrical engineer,M. Chen PE,EQORE,(617) 555-0153,switchgear_datasheet;signage;installation
+*,EQORE 24/7 response,EQORE NOC,EQORE,(617) 555-0199,
+S-1001,Supplier contact,Northbridge supplier portal,Northbridge Power Systems (fictional),(508) 555-0110,procurement
+S-1001,Facility emergency contact,Dana Murphy,Century Tywood J3 Corp,(508) 555-0177,
+S-1002,Facility emergency contact,Luis Ortega,Atlas Cold Storage LLC (fictional),(508) 555-0233,
+S-1002,Supplier contact,Sungrow service desk (fictional contact),Supplier,(508) 555-0240,procurement
+S-1003,Supplier contact,Corvane submittals (fictional),Corvane Power Electronics (fictional),(508) 555-0301,procurement
+S-1003,Facility emergency contact,Priya Nair,Granite Precision Inc. (fictional),(508) 555-0322,
+S-1004,Supplier contact,Lumora submittals (fictional),Lumora Energy Storage (fictional),(508) 555-0410,procurement
+S-1004,Facility emergency contact,Tom Walsh,Harbor Foods Co. (fictional),(508) 555-0455,
+S-1005,Supplier contact,Lumora submittals (fictional),Lumora Energy Storage (fictional),(510) 555-0510,procurement
+S-1005,Facility emergency contact,Grace Kim,Redwood Electronics (fictional),(510) 555-0533,

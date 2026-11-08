@@ -69,6 +69,7 @@ const sanitize = (m: string) => m.replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-***").sli
 
 // ---------- Deterministic rules engine (labeled fallback) ----------
 const TYPE_RULES: [string, RegExp][] = [
+  ["ventilation_plan", /ventilation (and|&|\/) exhaust plan|ventilation plan|exhaust ventilation design/i],
   ["plan_set", /plan set|sheet index|ess-1\.0|engineer of record/i],
   ["switchgear_datasheet", /switchgear|ac disconnect|disconnect switch/i],
   ["ul9540a_report", /9540a/i],

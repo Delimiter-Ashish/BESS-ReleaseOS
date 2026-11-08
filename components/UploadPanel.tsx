@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ChangeTable, Confidence, EngineBadge, EvidenceStatus, Hash } from "@/components/ui";
-import { REQUIREMENTS } from "@/lib/requirements";
+import { DOCUMENT_TYPES as REQUIREMENTS } from "@/lib/requirements";
 import type { Fact, FactChange } from "@/lib/types";
 
 interface Result {

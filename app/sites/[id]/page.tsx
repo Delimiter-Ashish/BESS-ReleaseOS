@@ -8,6 +8,7 @@ import EngineeringTasks, { type TaskView } from "@/components/EngineeringTasks";
 import ReviewPanel, { type ReviewView } from "@/components/ReviewPanel";
 import UploadPanel from "@/components/UploadPanel";
 import { can, getSession } from "@/lib/auth";
+import { pkgLabel } from "@/lib/labels";
 import { STATUS_META, evaluateSite } from "@/lib/compliance";
 import { PACKAGE_TEMPLATES, REQ_BY_ID, ROLE_LABEL, STAGES, stageIndex } from "@/lib/requirements";
 import { latestApproved, latestRelease, packageReadiness, releaseStatus, revisionsOf } from "@/lib/release";
@@ -67,7 +68,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
   const tasks: TaskView[] = engTasks.filter((t) => t.status !== "superseded").map((t) => {
     const src = site.documents.find((d) => d.id === t.sourceRevisionId);
     const dep = t.dependentRevisionId ? site.documents.find((d) => d.id === t.dependentRevisionId) : undefined;
-    return { id: t.id, source: name(t.sourceRequirementId), sourceRev: src?.revLabel ?? "?", sourceApproved: src?.status === "approved" && latestApproved(site, t.sourceRequirementId)?.id === src.id, dependent: name(t.dependentRequirementId), dependentRev: dep?.revLabel, changedKeys: t.changedKeys, explanation: t.explanation, aiImpact: t.aiImpact, status: t.status, resolvedBy: t.resolvedBy, resolvedAt: t.resolvedAt, resolution: t.resolution, resolutionNote: t.resolutionNote };
+    return { id: t.id, source: name(t.sourceRequirementId), sourceRev: src?.revLabel ?? "?", sourceApproved: src?.status === "approved" && latestApproved(site, t.sourceRequirementId)?.id === src.id, dependent: name(t.dependentRequirementId), dependentRev: dep?.revLabel, changedKeys: t.changedKeys, explanation: t.explanation, aiImpact: t.aiImpact, status: t.status, resolvedBy: t.resolvedBy, resolvedAt: t.resolvedAt, resolution: t.resolution, resolutionNote: t.resolutionNote, kind: t.kind, consistency: t.consistency?.map((c) => { const da = site.documents.find((d) => d.id === c.a.revisionId), db = site.documents.find((d) => d.id === c.b.revisionId); return { findingId: c.findingId, quantity: c.quantity, a: { ...c.a, doc: da ? `${name(da.requirementId)} Rev ${da.revLabel}` : undefined }, b: { ...c.b, doc: db ? `${name(db.requirementId)} Rev ${db.revLabel}` : undefined } }; }) };
   });
 
   const packages = PACKAGE_TEMPLATES.map((t) => {
@@ -82,7 +83,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
     <>
       <AppHeader />
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="text-sm text-slate-500"><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500"><span><Link href="/" className="hover:underline">Portfolio</Link> / {site.id}</span><span className="flex gap-2"><Link href={`/sites/${site.id}/guardian`} className="pill bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-700">Project Guardian · Run Preflight →</Link><Link href={`/sites/${site.id}/memory`} className="pill bg-indigo-50 text-indigo-700 ring-indigo-200 hover:bg-indigo-100">Project memory &amp; pre-submission check →</Link></span></div>
 
         <section className="card flex flex-wrap items-start justify-between gap-6 p-5">
           <div className="space-y-1">
@@ -106,7 +107,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
             <a href={qrUrl} target="_blank" className="text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qr} alt="Site QR code" className="h-24 w-24 rounded-lg border border-slate-200" />
-              <div className="mt-1 text-xs text-slate-500">Site QR</div>
+              <div className="mt-1 text-xs text-slate-500">Emergency Access / Site QR</div>
             </a>
           </div>
         </section>
@@ -116,7 +117,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
           {packages.map(({ t, ready, last, status }) => (
             <a key={t.id} href={`#pkg-${t.id}`} className={`card flex items-center justify-between gap-3 p-3 transition hover:shadow ${ready.canBuild ? "border-emerald-200" : "border-red-200"}`}>
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold">{t.name}</div>
+                <div className="truncate text-sm font-semibold">{pkgLabel(t.id, t.name)}</div>
                 <div className="text-xs text-slate-500">{ready.readyCount}/{ready.items.length} ready{last ? ` · latest R${last.number}` : " · no release yet"}</div>
               </div>
               <div className="flex flex-col items-end gap-1">
@@ -135,7 +136,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
           </div>
           <aside className="space-y-4">
             <div className="card p-4">
-              <div className="text-sm font-semibold">Audit trail</div>
+              <div className="text-sm font-semibold">Activity &amp; Approval History</div>
               <p className="mb-2 text-[11px] text-slate-500">Human decisions recorded with server-side identity.</p>
               {audit.length === 0 ? (
                 <div className="text-xs text-slate-500">No decisions since the demo started ({storeStartedAt().slice(11, 16)} UTC). Seeded history is included in release snapshots.</div>
@@ -159,7 +160,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
                 <li>AI extracts facts and explains possible impacts. It never approves, resolves or releases.</li>
                 <li>Material changes and dependency reviews block new releases until an authorized engineer records a decision.</li>
                 <li>Releases freeze approved bytes, hashes and approvals. Older releases are never modified.</li>
-                <li>In-memory demo store: restarting the server resets to seed data.</li>
+                <li>State is persisted on the server; “Reset demo data” restores the seed.</li>
               </ul>
             </div>
           </aside>
@@ -168,7 +169,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
         {/* Submission packages */}
         <section>
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-semibold">Submission packages</h2>
+            <h2 className="text-lg font-semibold">Document Packages &amp; Approvals</h2>
             <span className="text-xs text-slate-500">Version-locked: only approved revisions, pinned by SHA-256. Checklists illustrative until EQORE confirms.</span>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
@@ -176,7 +177,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
               <div key={t.id} id={`pkg-${t.id}`} className="card flex flex-col p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-semibold">{t.name}</div>
+                    <div className="font-semibold">{pkgLabel(t.id, t.name)}</div>
                     <div className="text-xs text-slate-500">{t.audience}</div>
                   </div>
                   <span className="text-xs tabular-nums text-slate-500">{ready.readyCount}/{ready.items.length} ready</span>
@@ -219,7 +220,7 @@ export default async function SitePage({ params }: { params: { id: string } }) {
         </section>
 
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Lifecycle documents</h2>
+          <h2 className="text-lg font-semibold">Project Roadmap</h2>
           <div className="flex flex-wrap gap-1.5">
             {STAGES.map((st, i) => {
               const states = ev.states.filter((s) => s.req.stage === st.id);

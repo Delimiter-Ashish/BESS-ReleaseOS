@@ -2,24 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  color: #0f172a;
-  background: #f6f7f9;
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+/* ReleaseOS midnight theme — see tailwind.config.ts for the remapped palette. */
+:root {
+  color-scheme: dark;
+  --bg: #060912;
+  --surface: #0c1322;
+  --line: #1b2740;
+  --cyan: #22d3ee;
+  --teal: #2dd4bf;
+  --amber: #fbbf24;
 }
 
-.card {
-  @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+html { background: var(--bg); }
+body {
+  color: #f1f4f9;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, rgba(34, 211, 238, 0.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(30, 58, 138, 0.18), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-.pill {
-  @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset;
+
+::selection { background: rgba(34, 211, 238, 0.3); color: #fff; }
+
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 6px; }
+
+input, select, textarea { color: #f1f4f9; }
+input::placeholder, textarea::placeholder { color: #64748f; }
+select option { background: #0c1322; color: #f1f4f9; }
+input[type="checkbox"] { accent-color: var(--cyan); }
+
+/* Thin dark scrollbars */
+* { scrollbar-width: thin; scrollbar-color: #283754 transparent; }
+
+@layer components {
+  .card {
+    @apply min-w-0 rounded-2xl border border-slate-200 bg-white/80 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_10px_30px_-12px_rgba(0,0,0,0.6)] backdrop-blur-sm;
+  }
+  .glass {
+    @apply rounded-2xl border border-white/0 bg-night-700/60 ring-1 ring-inset ring-[rgba(148,163,184,0.12)] backdrop-blur-md;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply btn bg-gradient-to-b from-cyan-400 to-teal-500 text-night-950 shadow-[0_6px_20px_-8px_rgba(34,211,238,0.6)] hover:from-cyan-300 hover:to-teal-400;
+  }
+  .btn-ghost {
+    @apply btn border border-slate-300 bg-night-700/60 text-slate-800 hover:border-slate-400 hover:bg-night-600;
+  }
+  .btn-amber {
+    @apply btn bg-amber-400 text-night-950 hover:bg-amber-300;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-300/80;
+  }
+  .term {
+    @apply cursor-help border-b border-dotted border-cyan-400/60;
+  }
 }
-.btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-50;
-}
-.btn-primary {
-  @apply btn bg-slate-900 text-white hover:bg-slate-700;
-}
-.btn-ghost {
-  @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+
+/* ---------- Motion (all decorative motion is disabled for prefers-reduced-motion) ---------- */
+@keyframes ros-sweep { 0% { transform: translateY(-100%); } 100% { transform: translateY(400%); } }
+@keyframes ros-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes ros-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@keyframes ros-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ros-seal { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes ros-ring { 0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.55); } 100% { box-shadow: 0 0 0 22px rgba(45, 212, 191, 0); } }
+
+.ros-sweep { animation: ros-sweep 1.8s cubic-bezier(.4, 0, .2, 1) infinite; }
+.ros-pulse { animation: ros-pulse 1.4s ease-in-out infinite; }
+.ros-indeterminate { animation: ros-indeterminate 1.3s ease-in-out infinite; }
+.ros-rise { animation: ros-rise 0.35s ease-out both; }
+.ros-seal { animation: ros-seal 0.6s cubic-bezier(.2, .9, .3, 1.2) both, ros-ring 1.4s ease-out 0.3s 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+  .ros-sweep, .ros-indeterminate { display: none; }
 }

@@ -14,9 +14,14 @@
     "samples": "node scripts/generate-sample-pdfs.mjs",
     "test": "npm run test:core && npm run test:app",
     "test:core": "npm --prefix packages/release-core test",
-    "test:app": "npm run core:build && tsx --test tests/*.test.ts",
+    "test:app": "npm run core:build && RELEASEOS_PERSIST=off tsx --test tests/*.test.ts",
     "e2e": "node scripts/e2e.mjs",
-    "postinstall": "npm --prefix packages/release-core ci --no-audit --no-fund && npm run core:build"
+    "postinstall": "npm --prefix packages/release-core ci --no-audit --no-fund && npm run core:build",
+    "e2e:assurance": "node scripts/e2e-assurance.mjs",
+    "samples:demo": "node scripts/generate-demo-pdfs.mjs",
+    "e2e:memory": "node scripts/e2e-memory.mjs",
+    "e2e:guardian": "node scripts/e2e-guardian.mjs",
+    "e2e:studio": "node scripts/e2e-studio.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
@@ -24,6 +29,7 @@
     "jszip": "^3.10.2",
     "next": "14.2.35",
     "openai": "^7.53.0",
+    "pdfjs-dist": "3.11.174",
     "qrcode": "^1.5.4",
     "react": "^18",
     "react-dom": "^18",

@@ -19,6 +19,7 @@ export interface DemoUser {
 export const DEMO_USERS: DemoUser[] = [
   { id: "rpatel", name: "R. Patel, PE", role: "eqore", engineer: true, passcode: "eng855", title: "EQORE engineer of record" },
   { id: "mchen", name: "M. Chen, PE", role: "eqore", engineer: true, passcode: "eng856", title: "EQORE electrical engineer" },
+  { id: "kaushik", name: "Kaushik Joshi", role: "eqore", engineer: false, passcode: "pm855", title: "EQORE project manager (demo)" },
   { id: "arivera", name: "A. Rivera", role: "eqore", engineer: false, passcode: "eqore855", title: "EQORE project manager" },
   { id: "supplier", name: "Northbridge supplier portal", role: "supplier", engineer: false, passcode: "supp855", title: "Supplier (fictional)" },
   { id: "ahj", name: "Holliston Fire Marshal", role: "ahj", engineer: false, passcode: "ahj855", title: "AHJ reviewer" },
@@ -84,7 +85,7 @@ export class AuthError extends Error {
   }
 }
 
-export type Capability = "upload" | "review" | "release" | "read_private" | "reset";
+export type Capability = "upload" | "review" | "release" | "read_private" | "reset" | "memory";
 export function can(s: Session, cap: Capability) {
   switch (cap) {
     case "upload":
@@ -93,6 +94,7 @@ export function can(s: Session, cap: Capability) {
     case "release":
       return s.engineer;
     case "reset":
+    case "memory": // import communications, read/confirm/dismiss/resolve project memory (internal EQORE data)
       return s.role === "eqore";
     case "read_private":
       return s.role !== "public";

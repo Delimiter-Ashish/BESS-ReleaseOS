@@ -67,3 +67,16 @@ export async function openaiExplain(input: { documentName: string; fromRev?: str
     })),
   };
 }
+
+/** Communication intelligence (project memory). Text-only input; output is re-validated by groundCommunication. */
+export async function openaiAnalyzeCommunication(instructions: string, prompt: string, schema: Record<string, unknown>) {
+  const res = await client().responses.create({
+    model: OPENAI_MODEL(),
+    instructions,
+    input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+    text: { format: { type: "json_schema", name: "bess_communication_memory", schema, strict: true } },
+    max_output_tokens: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 12_000),
+    store: false,
+  });
+  return { raw: parseOutput(res), model: res.model ?? OPENAI_MODEL(), usage: res.usage };
+}

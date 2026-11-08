@@ -431,7 +431,27 @@ export const REQUIREMENTS: Requirement[] = [
   },
 ];
 
-export const REQ_BY_ID = Object.fromEntries(REQUIREMENTS.map((r) => [r.id, r])) as Record<string, Requirement>;
+/**
+ * Document types that are NOT on any default checklist: they become required for a site only when a
+ * CONFIRMED project-memory requirement asks for them (e.g. an AHJ email requesting a ventilation plan).
+ * Kept out of REQUIREMENTS so seeded portfolio data and stage compliance scoring are unchanged.
+ */
+export const ON_DEMAND_REQUIREMENTS: Requirement[] = [
+  {
+    id: "ventilation_plan",
+    name: "Ventilation / exhaust plan",
+    stage: "design",
+    codeRef: "AHJ / fire marshal request (NFPA 855 explosion control & ventilation provisions — confirm edition with the AHJ)",
+    mustInclude: "Exhaust/ventilation design basis, airflow rate, fan and gas-detection interlock, sequence of operation, PE stamp",
+    when: "When required by the AHJ or fire marshal; re-issued when enclosure, gas detection or layout changes",
+    access: ["eqore", "ahj", "facility"],
+    triggers: [],
+    keyFacts: ["revision.label", "doc.date", "doc.number"],
+  },
+];
+/** Every document type the app can file (default checklists + on-demand). */
+export const DOCUMENT_TYPES: Requirement[] = [...REQUIREMENTS, ...ON_DEMAND_REQUIREMENTS];
+export const REQ_BY_ID = Object.fromEntries(DOCUMENT_TYPES.map((r) => [r.id, r])) as Record<string, Requirement>;
 
 // ---------- Submission package templates ----------
 // ILLUSTRATIVE until EQORE confirms the real checklists (say so in the demo).

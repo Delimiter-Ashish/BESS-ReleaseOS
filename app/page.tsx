@@ -1,124 +1,210 @@
 import Link from "next/link";
-import { AppHeader } from "@/components/AppHeader";
-import PortfolioTable, { type Row } from "@/components/PortfolioTable";
-import { STATUS_META, evaluateSite } from "@/lib/compliance";
-import { STAGES, stageIndex } from "@/lib/requirements";
-import { getReleases, getReviews, getSites } from "@/lib/store";
-import { releaseStatus } from "@/lib/release";
+import { ago, DocStatusPill, MetricTile, Page, ReadinessPill, SeverityDot, SyntheticNote } from "@/components/kit";
+import { getSession } from "@/lib/auth";
+import { guardianPortfolio } from "@/lib/guardian-view";
+import { pkgLabel } from "@/lib/labels";
+import { FINDING_LABEL, findings, reviewQueue, todayMetrics } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const sites = getSites();
-  const evals = sites.map((s) => ({ site: s, ev: evaluateSite(s) }));
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
 
-  const rows: Row[] = evals.map(({ site, ev }) => ({
-    id: site.id,
-    name: site.name,
-    city: site.city,
-    state: site.state,
-    stage: site.stage,
-    stageLabel: STAGES[stageIndex(site.stage)].label,
-    utility: site.utility,
-    kwh: site.energyKwh,
-    score: ev.score,
-    health: ev.health,
-    missing: ev.counts.missing,
-    outdated: ev.counts.outdated,
-    overdue: ev.counts.overdue,
-    dueSoon: ev.counts.due_soon,
-    review: ev.counts.pending_review,
-  }));
-
-  const totalDocs = sites.reduce((n, s) => n + s.documents.length, 0);
-  const openIssues = evals.reduce((n, e) => n + e.ev.issues, 0);
-  const red = evals.filter((e) => e.ev.health === "red").length;
-  const dueSoon = evals.reduce((n, e) => n + e.ev.counts.due_soon, 0);
-  const rels = getReleases();
-  const staleRel = rels.filter((r) => { const s = sites.find((x) => x.id === r.siteId)!; return r.number === Math.max(...rels.filter((y) => y.siteId === r.siteId && y.templateId === r.templateId).map((y) => y.number)) && releaseStatus(s, r).state === "stale"; }).length;
-  const openReviews = getReviews().filter((r) => r.status === "open").length;
-  const openDeps = sites.reduce((n, s) => n + (s.engTasks ?? []).filter((t) => t.status === "open").length, 0);
-  const totalMwh = sites.reduce((n, s) => n + s.energyKwh, 0) / 1000;
-
-  const actionItems = evals
-    .flatMap(({ site, ev }) =>
-      ev.states
-        .filter((s) => ["missing", "outdated", "overdue", "due_soon"].includes(s.status))
-        .map((s) => ({ site, s })),
-    )
-    .sort((a, b) => STATUS_META[a.s.status].rank - STATUS_META[b.s.status].rank)
-    .slice(0, 8);
-
-  const stageCounts = STAGES.map((st) => ({ ...st, n: sites.filter((s) => s.stage === st.id).length }));
+export default async function Today() {
+  const s = getSession();
+  const m = todayMetrics();
+  const all = findings(s);
+  const guardian = await guardianPortfolio();
+  const attention = all.filter((f) => (f.lifecycle === "action_required" || f.lifecycle === "needs_confirmation") && f.severity !== "low").slice(0, 7);
+  const revisions = reviewQueue(s).filter((r) => r.kind === "revision").slice(0, 5);
+  const plain = s.name.replace(/,.*$/, "").trim();
+  const first = plain.split(" ")[0];
+  const firstName = s.userId === "public" ? "" : /^[A-Z]\.?$/.test(first) ? plain : first;
+  const hero = guardian.find((g) => g.projectId === "S-1001") ?? guardian[0];
+  const guardianBlockers = guardian.reduce((n, g) => n + g.blockers, 0);
+  const openActions = all.filter((f) => f.lifecycle === "action_required").length;
+  const toConfirm = all.filter((f) => f.lifecycle === "needs_confirmation").length;
+  const engineer = s.engineer;
+  const runHref = hero ? `/guardian?project=${hero.projectId}&template=${hero.templateId}&run=1` : "/guardian";
 
   return (
-    <>
-      <AppHeader />
-      <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Portfolio compliance</h1>
-            <p className="text-sm text-slate-500">Every document a battery project needs — contract, supplier docs, permits, NFPA 855 — every revision, and version-locked submission packages.</p>
-          </div>
+    <Page>
+      <section className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="eyebrow">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</div>
+          <h1 className="mt-1 text-[1.7rem] font-semibold tracking-tight text-slate-900">{greeting()}{firstName ? `, ${firstName}` : ""}. Here&apos;s what your projects need today.</h1>
+          {s.userId === "public" && <p className="mt-1 text-sm text-slate-500">Choose a demo identity in the sidebar to import documents, review or sign off.</p>}
         </div>
+        <div className="flex flex-wrap gap-2">
+          {engineer ? <Link href="/reviews" className="btn-primary">Open assigned reviews</Link> : <Link href="/inbox" className="btn-ghost">Import documents</Link>}
+          <Link href="/submissions" className="btn-ghost">{engineer ? "Release signoff" : "Submission Studio"}</Link>
+        </div>
+      </section>
 
-        <section className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          {[
-            { k: "Sites", v: sites.length, sub: `${totalMwh.toFixed(1)} MWh storage` },
-            { k: "Documents tracked", v: totalDocs.toLocaleString(), sub: "revisions across 11 lifecycle stages" },
-            { k: "Open issues", v: openIssues, sub: "missing · outdated · overdue", tone: "text-red-600" },
-            { k: "Sites needing action", v: red, sub: `${Math.round((red / sites.length) * 100)}% of portfolio`, tone: "text-orange-600" },
-            { k: "Engineering review", v: openReviews + openDeps, sub: `${openReviews} revision(s) · ${openDeps} dependency review(s) · ${staleRel} stale package(s) · ${dueSoon} due soon`, tone: "text-violet-600" },
-          ].map((t) => (
-            <div key={t.k} className="card p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{t.k}</div>
-              <div className={`mt-1 text-3xl font-semibold tabular-nums ${t.tone ?? ""}`}>{t.v}</div>
-              <div className="mt-1 text-xs text-slate-500">{t.sub}</div>
+      {/* Hero — every number below is computed from the store / the Guardian preflight. */}
+      <section className="relative overflow-hidden rounded-3xl border border-[rgba(34,211,238,0.18)] bg-night-950 p-6 shadow-2xl sm:p-8">
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(700px_300px_at_85%_0%,rgba(34,211,238,0.16),transparent_70%),radial-gradient(600px_300px_at_0%_100%,rgba(30,58,138,0.35),transparent_70%)]" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:32px_32px]" />
+        <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#67e8f9]">Project Guardian</div>
+            <h2 className="mt-2 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">What are we forgetting before our next submission?</h2>
+            <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
+              Guardian checks every document, revision, engineering dependency and confirmed AHJ requirement for a package — and tells you exactly what is missing, why it matters, where the evidence is and who needs to act.
+            </p>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Link href={runHref} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-[#67e8f9] to-[#2dd4bf] px-5 py-3 text-sm font-semibold text-night-950 shadow-[0_10px_30px_-10px_rgba(34,211,238,0.8)] transition hover:brightness-110">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z" /></svg>
+                Run Project Guardian
+              </Link>
+              <Link href="/memory" className="rounded-xl px-4 py-3 text-sm font-medium text-ink-soft ring-1 ring-inset ring-[rgba(148,163,184,0.25)] transition hover:bg-[rgba(255,255,255,0.05)] hover:text-ink">Open Action Center</Link>
             </div>
-          ))}
-        </section>
-
-        <section className="card p-4">
-          <div className="mb-3 text-sm font-medium text-slate-700">Projects by lifecycle stage</div>
-          <div className="flex h-9 overflow-hidden rounded-lg">
-            {stageCounts.map((st, i) => (
-              <div
-                key={st.id}
-                style={{ flexGrow: st.n || 0.0001 }}
-                className={`flex items-center justify-center border-r border-white text-xs font-medium text-white ${["bg-slate-300", "bg-slate-400", "bg-slate-500", "bg-slate-600", "bg-sky-400", "bg-sky-500", "bg-sky-600", "bg-indigo-500", "bg-indigo-600", "bg-emerald-600", "bg-stone-500"][i]}`}
-                title={`${st.label}: ${st.n}`}
-              >
-                {st.n > 3 ? `${st.short} ${st.n}` : st.n || ""}
+            {hero && <div className="mt-3 text-xs text-ink-muted">Runs the server preflight for {hero.projectName} · {pkgLabel(hero.templateId, hero.templateName)}. Results come from the release gate — nothing is precomputed or simulated.</div>}
+          </div>
+          <div className="grid grid-cols-3 gap-3 lg:w-[380px]">
+            {[
+              { v: hero?.blockers ?? 0, l: `${(hero?.blockers ?? 0) === 1 ? "blocker" : "blockers"}${hero ? ` · ${pkgLabel(hero.templateId)}` : ""}`, c: (hero?.blockers ?? 0) ? "text-[#fca5a5]" : "text-[#5eead4]" },
+              { v: openActions, l: "open actions", c: "text-[#fde68a]" },
+              { v: toConfirm, l: "to confirm", c: "text-[#67e8f9]" },
+            ].map((x) => (
+              <div key={x.l} className="rounded-2xl bg-[rgba(255,255,255,0.04)] p-3 ring-1 ring-inset ring-[rgba(148,163,184,0.14)]">
+                <div className={`text-3xl font-semibold tabular-nums ${x.c}`}>{x.v}</div>
+                <div className="mt-0.5 text-[11px] leading-tight text-ink-muted">{x.l}</div>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <section className="lg:col-span-2">
-            <PortfolioTable rows={rows} />
-          </section>
-          <section className="card h-fit p-4">
-            <div className="mb-3 text-sm font-semibold">Top action items</div>
-            <ul className="space-y-3">
-              {actionItems.map(({ site, s }) => (
-                <li key={site.id + s.req.id}>
-                  <Link href={`/sites/${site.id}`} className="block rounded-lg p-2 hover:bg-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className={`pill ${STATUS_META[s.status].color}`}>{STATUS_META[s.status].label}</span>
-                      <span className="truncate text-sm font-medium">{s.req.name}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {site.name} · {site.city}, {site.state}
-                    </div>
-                    <div className="text-xs text-slate-400">{s.reason}</div>
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <MetricTile label="Missing now" value={m.missingNow} sub="for each project's current stage" href="/projects?view=register&status=missing" tone={m.missingNow ? "red" : "green"}
+          how={<>Unique (project, document type) pairs that apply at the project&apos;s current or earlier stage — or are required by one of its current packages — with no revision on file. A document needed by two packages counts once.</>} />
+        <MetricTile label="Pending engineer reviews" value={m.pendingReviews + m.openDependencies} sub={`${m.pendingReviews} revision · ${m.openDependencies} dependency`} href="/reviews" tone="violet"
+          how={<>Open revision review tasks plus open engineering dependency / cross-document review tasks in the store. Each is decided independently by an authorized engineer.</>} />
+        <MetricTile label="Outdated approved documents" value={m.outdatedDocs} sub="approved, but flagged outdated" href="/projects?view=register&status=outdated" tone={m.outdatedDocs ? "amber" : "green"}
+          how={<>Approved revisions whose requirement rule marks them outdated or overdue (lib/compliance.ts), e.g. a document that must be re-issued after a change.</>} />
+        <MetricTile label="Open Guardian blockers" value={guardianBlockers} sub={`${guardian.length} current package checks`} href="/guardian" tone={guardianBlockers ? "red" : "green"}
+          how={<>Sum of blocking findings returned by the Project Guardian preflight (POST /api/sites/:id/preflight logic) for every project&apos;s current packages. Blocking findings are exactly the release gate.</>} />
+        <MetricTile label="Blocked packages" value={m.blockedSubmissions.length} sub="current packages not ready" href="/submissions?status=blocked" tone={m.blockedSubmissions.length ? "red" : "green"}
+          how={<>Current packages (the package that matches the project&apos;s stage, or one already released) where the backend gate reports canBuild = false.</>} />
+        <MetricTile label="Needed later" value={m.neededLater} sub="future-stage requirements" href="/projects?view=register&status=not_yet_required"
+          how={<>Requirements that belong to later lifecycle stages (e.g. commissioning records for a project in permitting). Shown so nothing is forgotten — never counted as missing.</>} />
+      </section>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="card lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <h2 className="text-sm font-semibold">What needs attention today?</h2>
+            <Link href="/memory" className="text-xs text-cyan-600 hover:underline">All findings →</Link>
+          </div>
+          {attention.length === 0 ? <div className="p-6 text-center text-sm text-slate-500">Nothing urgent.</div> : (
+            <ul className="divide-y divide-slate-200">
+              {attention.map((f) => (
+                <li key={f.id}>
+                  <Link href={f.href} className="flex items-start gap-3 px-4 py-3 transition hover:bg-slate-50">
+                    <span className="mt-1.5"><SeverityDot s={f.severity} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-slate-900">{f.title}</span>
+                        <span className="pill bg-slate-100 text-slate-600 ring-slate-200">{FINDING_LABEL[f.type]}</span>
+                        {f.lifecycle === "needs_confirmation" && <span className="pill bg-cyan-50 text-cyan-700 ring-cyan-200">Needs confirmation</span>}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-slate-500">{f.projectName} · {f.detail}</span>
+                      {f.blocking.length > 0 && <span className="mt-0.5 block text-[11px] text-red-600">Blocks {f.blocking.map((b) => b).join(", ")}</span>}
+                    </span>
+                    <span className="shrink-0 text-right text-xs text-slate-500">{f.owner}<span className="block text-cyan-600">{f.hrefLabel} →</span></span>
                   </Link>
                 </li>
               ))}
             </ul>
-          </section>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold">Guardian · current packages</div>
+          <ul className="divide-y divide-slate-200">
+            {guardian.map((g) => (
+              <li key={g.projectId + g.templateId}>
+                <Link href={`/guardian?project=${g.projectId}&template=${g.templateId}`} className="block px-4 py-3 transition hover:bg-slate-50">
+                  <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-medium">{g.projectName}</span><ReadinessPill s={g.canBuild ? "ready" : "blocked"} /></div>
+                  <div className="mt-0.5 text-[11px] text-slate-500">{pkgLabel(g.templateId, g.templateName)} · {g.blockers} blocker{g.blockers === 1 ? "" : "s"} · {g.warnings} warning{g.warnings === 1 ? "" : "s"}</div>
+                  {g.topBlockers[0] && <div className="mt-0.5 truncate text-[11px] text-slate-600">Next: {g.topBlockers[0].nextAction}</div>}
+                </Link>
+              </li>
+            ))}
+            {guardian.length === 0 && <li className="px-4 py-3 text-xs text-slate-500">No package is due at the projects&apos; current stages.</li>}
+          </ul>
+        </section>
+
+        <section className="card lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <h2 className="text-sm font-semibold">Latest revision activity</h2>
+            {engineer && <Link href="/reviews?status=all" className="text-xs text-cyan-600 hover:underline">Review inbox →</Link>}
+          </div>
+          <ul className="divide-y divide-slate-200">
+            {revisions.map((r) => (
+              <li key={r.id}>
+                <Link href={engineer ? `/reviews?item=${encodeURIComponent(r.id)}` : `/projects/${r.projectId}?doc=${r.requirementId}`} className="flex items-center gap-3 px-4 py-2.5 transition hover:bg-slate-50">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{r.docName} Rev {r.revLabel}{r.prevLabel ? <span className="font-normal text-slate-500"> (replaces Rev {r.prevLabel})</span> : null}</span>
+                    <span className="block truncate text-xs text-slate-500">{r.projectName} · {r.reason}</span>
+                  </span>
+                  <span className={`pill ${r.open ? "bg-violet-50 text-violet-700 ring-violet-200" : r.status === "approved" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-slate-100 text-slate-600 ring-slate-200"}`}>{r.open ? "Awaiting engineer" : r.status}</span>
+                  <span className="w-20 text-right text-[11px] text-slate-400">{ago(r.decidedAt ?? r.uploadedAt)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="card">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <h2 className="text-sm font-semibold">Recently received</h2>
+            <Link href="/inbox" className="text-xs text-cyan-600 hover:underline">Inbox →</Link>
+          </div>
+          <ul className="divide-y divide-slate-200">
+            {m.recentDocuments.map((d) => (
+              <li key={d.id}>
+                <Link href={`/projects/${d.projectId}?doc=${d.requirementId}`} className="block px-4 py-2.5 transition hover:bg-slate-50">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm">{d.docName} Rev {d.revLabel}</span>
+                    <DocStatusPill s={d.status === "in_review" ? "pending_review" : d.status === "uploaded" ? "received" : d.status} />
+                  </div>
+                  <div className="truncate text-[11px] text-slate-500">{d.projectName} · {d.uploadedBy} · {ago(d.uploadedAt)}</div>
+                  <div className="text-[10px] text-slate-400">{d.provenance}</div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="card p-5">
+          <div className="eyebrow !text-slate-500">Before</div>
+          <div className="mt-1 text-base font-semibold">Drive folders, email threads and memory</div>
+          <ul className="mt-2 space-y-1.5 text-sm text-slate-600">
+            <li>• Supplier revisions arrive by email; someone has to notice that Rev B replaced Rev A.</li>
+            <li>• AHJ comments live in an inbox — nobody is sure they reached the permit package.</li>
+            <li>• Engineers check dependent drawings when they remember to.</li>
+            <li>• A package is assembled by hand from whatever is in the folder that day.</li>
+          </ul>
         </div>
-      </main>
-    </>
+        <div className="card border-[rgba(34,211,238,0.25)] p-5">
+          <div className="eyebrow">With ReleaseOS</div>
+          <div className="mt-1 text-base font-semibold">One evidence-backed record per project</div>
+          <ul className="mt-2 space-y-1.5 text-sm text-slate-600">
+            <li>• Every upload is hashed, extracted with page evidence and compared with the approved revision.</li>
+            <li>• Communications become <i>suggested</i> requirements; a person confirms them before they count.</li>
+            <li>• Material changes open engineer reviews on dependent documents automatically.</li>
+            <li>• Guardian runs the release gate before submission; engineers seal immutable releases.</li>
+          </ul>
+          <div className="mt-2 text-[11px] text-slate-400">We do not claim measured time savings — this is the workflow difference, not a benchmark.</div>
+        </div>
+      </section>
+      <SyntheticNote />
+    </Page>
   );
 }
