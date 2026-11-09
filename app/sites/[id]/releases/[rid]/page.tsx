@@ -20,12 +20,14 @@ const LABEL = {
   stale: "SUPERSEDED IN LIVE DATA — a newer approved revision exists; this frozen release is unchanged",
 } as const;
 
-export default function ReleasePage({ params, searchParams }: { params: { id: string; rid: string }; searchParams: { compare?: string } }) {
+export default async function ReleasePage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ id: string; rid: string }>; searchParams: Promise<{ compare?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const site = getSite(params.id);
   const rel = getRelease(params.rid);
   if (!site || !rel?.snapshot) notFound();
   // Same rule as the download routes: EQORE, or the addressed recipient of a fully authorized Studio package.
-  const session = getSession();
+  const session = await getSession();
   if (!canDownloadRelease(session, rel)) return <Restricted what="This release record" role={session.role} />;
   const snap = rel.snapshot;
   const studio = studioOf(rel);

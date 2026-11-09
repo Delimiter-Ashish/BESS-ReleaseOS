@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  *   ?format=json     frozen human-readable manifest
  *   ?format=snapshot sealed snapshot metadata (document bytes omitted)
  */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
     const session = requireCap(req, "read_private");
     const rel = getRelease(params.id);

@@ -6,6 +6,8 @@
 // Mutations enforce the deterministic rules: AI output never approves, never resolves, never releases.
 import { createReleaseZip, verifyReleaseSnapshot } from "@releaseos/release-core";
 import { randomUUID } from "node:crypto";
+import { checkStorageQuota } from "./resource-limits";
+import { signoffFingerprint } from "./signoff";
 import type { Session } from "./auth";
 import { pinnedFromSnapshot, sealRelease } from "./engine-adapter";
 import type { ExtractionResult } from "./extract";
@@ -73,6 +75,7 @@ export const getSite = (id: string) => db().sites.find((s) => s.id === id);
 export const getReviews = (siteId?: string) => db().reviews.filter((r) => !siteId || r.siteId === siteId);
 export const getReview = (id: string) => db().reviews.find((r) => r.id === id);
 export const getReleases = (siteId?: string) => db().releases.filter((r) => !siteId || r.siteId === siteId);
+export const findSignoffRetry = (siteId: string, fingerprint: string) => db().releases.find((r) => r.siteId === siteId && r.snapshot?.annotations?.signoffRequest === fingerprint);
 export const getRelease = (id: string) => db().releases.find((r) => r.id === id);
 export const getFile = (fileId: string) => db().files.get(fileId);
 export const getExtraction = (id: string) => db().extractions.get(id);
@@ -83,6 +86,7 @@ export const findRevision = (site: Site, id: string) => site.documents.find((d) 
 export function putFile(name: string, mediaType: string, bytes: Buffer) {
   const hash = sha256(bytes); // computed server-side from the actual bytes
   const fileId = `f_${hash.slice(0, 24)}`;
+  if (!db().files.has(fileId)) checkStorageQuota(Array.from(db().files.values()).reduce((n, f) => n + f.bytes.length, 0), bytes.length);
   db().files.set(fileId, { name, mediaType, bytes, sha256: hash });
   saveBlob(hash, bytes); // uploaded evidence is durable as soon as it is received
   return { fileId, sha256: hash };
@@ -273,10 +277,13 @@ export function buildRelease(siteId: string, templateId: string, session: Sessio
   const site = getSite(siteId);
   const t = TEMPLATE_BY_ID[templateId];
   if (!site || !t) throw new StoreError(404, "site or package not found");
+  const fingerprint = signoffFingerprint("legacy", siteId, templateId, session, text, expectedToken);
+  const retry = findSignoffRetry(siteId, fingerprint);
+  if (retry) return retry;
   const ready = packageReadiness(site, t);
   if (!expectedToken || expectedToken !== ready.token) throw new StoreError(409, "Package changed since readiness was checked — refresh before signing", { token: ready.token });
   if (!ready.canBuild) throw new StoreError(409, `Blocked: ${ready.issues.map((i) => i.message).join("; ")}`, { issues: ready.issues });
-  const rel = createRelease(site, templateId, session, text, ready.token, nowIso());
+  const rel = createRelease(site, templateId, session, text, ready.token, nowIso(), false, { annotations: { signoffRequest: fingerprint } });
   persist();
   return rel;
 }
@@ -371,6 +378,9 @@ export function commitStudioRelease(siteId: string, sel: StudioSelection, sessio
   const text = requireNote(note, "Release signoff");
   const site = getSite(siteId);
   if (!site) throw new StoreError(404, "site not found");
+  const fingerprint = signoffFingerprint("studio", siteId, sel, session, text, token);
+  const retry = findSignoffRetry(siteId, fingerprint);
+  if (retry) return retry;
   const check = studioCheck(site, db().releases, sel, bytesFor);
   if (!token || token !== check.token) throw new StoreError(409, "Selection, documents or access policy changed since the check — run the check again", { token: check.token });
   if (!check.canGenerate) throw new StoreError(409, `Blocked: ${check.blockers.map((b) => b.message).join("; ")}`, { blockers: check.blockers });
@@ -386,7 +396,7 @@ export function commitStudioRelease(siteId: string, sel: StudioSelection, sessio
   if (studio.policyDecisions.some((d) => !d.authorized)) throw new StoreError(403, "A selected document is not authorized for this recipient");
   for (const o of outputs) { const f = getFile(o.fileId); if (!f || f.sha256 !== o.sha256) throw new StoreError(500, `Combined PDF ${o.fileName} missing or altered`); }
   const expected = check.nextReleaseId;
-  const rel = createRelease(site, p.templateId, session, text, check.readinessToken, builtAt, false, { pinned, annotations: { studio } });
+  const rel = createRelease(site, p.templateId, session, text, check.readinessToken, builtAt, false, { pinned, annotations: { studio, signoffRequest: fingerprint } });
   if (rel.id !== expected) throw new StoreError(409, "Release numbering changed during generation — retry");
   persist();
   return rel;

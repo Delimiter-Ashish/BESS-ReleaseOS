@@ -18,9 +18,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Public first-responder pages: no workspace shell, no session, user directory or portfolio metrics in the payload.
-  const path = headers().get("x-ros-path") ?? "";
+  const path = (await headers()).get("x-ros-path") ?? "";
   if (path.startsWith("/p/") || path === "/intro") {
     return (
       <html lang="en">
@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </html>
     );
   }
-  const s = getSession();
+  const s = await getSession();
   const provider = selectedProvider();
   const keyed = provider === "openai" ? !!process.env.OPENAI_API_KEY : provider === "anthropic" ? !!process.env.ANTHROPIC_API_KEY : true;
   // Portfolio badge counts are internal: computed (and serialized) for EQORE sessions only.

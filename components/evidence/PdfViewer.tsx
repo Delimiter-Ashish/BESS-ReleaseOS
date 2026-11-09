@@ -2,6 +2,7 @@
 // Renders the ORIGINAL stored bytes (GET /api/files/:id, session-authorized) with pdf.js in the browser.
 // The evidence quote is located in the page's text layer; when found, its real coordinates are highlighted.
 // Nothing is sent to any external service.
+import { PDF_SAFE_OPTIONS } from "@/lib/pdf-options";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type PdfDoc = { numPages: number; getPage: (n: number) => Promise<PdfPage>; destroy: () => void };
@@ -10,13 +11,13 @@ type PdfPage = {
   render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
   getTextContent: () => Promise<{ items: { str: string; transform: number[]; width: number; height: number }[] }>;
 };
-type PdfJs = { getDocument: (o: { data: Uint8Array }) => { promise: Promise<PdfDoc> }; GlobalWorkerOptions: { workerSrc: string }; Util: { transform: (a: number[], b: number[]) => number[] } };
+type PdfJs = { getDocument: (o: { data: Uint8Array; isEvalSupported: false }) => { promise: Promise<PdfDoc> }; GlobalWorkerOptions: { workerSrc: string }; Util: { transform: (a: number[], b: number[]) => number[] } };
 
 let pdfjsPromise: Promise<PdfJs> | null = null;
 function loadPdfJs(): Promise<PdfJs> {
-  pdfjsPromise ??= import("pdfjs-dist/build/pdf").then((m) => {
+  pdfjsPromise ??= import("pdfjs-dist/build/pdf.mjs").then((m) => {
     const lib = ((m as unknown as { default?: PdfJs }).default ?? m) as unknown as PdfJs;
-    lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
+    lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
     return lib;
   });
   return pdfjsPromise;
@@ -58,7 +59,7 @@ export default function PdfViewer({ fileId, page: initialPage, quote }: { fileId
         const [lib, res] = await Promise.all([loadPdfJs(), fetch(`/api/files/${encodeURIComponent(fileId)}`, { credentials: "same-origin" })]);
         if (!res.ok) throw new Error(res.status === 401 ? "Sign in to view original documents" : `Could not load file (${res.status})`);
         const data = new Uint8Array(await res.arrayBuffer());
-        const doc = await lib.getDocument({ data }).promise;
+        const doc = await lib.getDocument({ data, ...PDF_SAFE_OPTIONS }).promise;
         if (cancelled) return doc.destroy();
         docRef.current?.doc.destroy();
         docRef.current = { lib, doc };

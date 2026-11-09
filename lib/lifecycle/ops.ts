@@ -2,6 +2,7 @@
 // EXISTING site record (Site.lifecycle, site.events, site.decisions) → history entry → persist(). No second store.
 import { createHash, randomBytes } from "node:crypto";
 import { AuthError, type Session } from "../auth";
+import { ruleFor } from "../studio/access";
 import { readTextLayer } from "../pdf";
 import { CHANGE_LABEL, DOCUMENT_TYPES, REQ_BY_ID, STAGES, stageIndex, type StageId } from "../requirements";
 import { latestApproved, pendingRevision } from "../release";
@@ -65,6 +66,19 @@ async function candidatePages(site: Site, lc: LifecycleState, base: string) {
 }
 
 export async function lifecycleAction(siteId: string, a: LifecycleAction, s: Session): Promise<Record<string, unknown>> {
+  requireRole(s, ["eqore", "facility"], "manage lifecycle records");
+  if (s.role === "facility") need(a.action === "propose_change" || a.action === "record_event", 403, "Facility staff may only propose changes or record events");
+  const current = getSite(siteId);
+  need(current, 404, "site not found");
+  if (s.role === "facility") {
+    const shared = (current.accessPolicy ?? []).some((r) => ruleFor(current, r.requirementId).view.includes("facility"));
+    need(shared, 403, "This project is not shared with facility staff");
+    if (a.action === "propose_change") need(!a.memoryItemId, 403, "Facility staff cannot link internal project memory");
+    if (a.action === "record_event") {
+      const ob = current.lifecycle?.obligations.find((o) => o.id === a.obligationId);
+      need(ob && ruleFor(current, ob.requirementId).view.includes("facility"), 403, "This obligation is not shared with facility staff");
+    }
+  }
   // Async work (text extraction) happens BEFORE any mutation; the mutation itself is synchronous.
   let pages: Map<string, string[]> | undefined;
   if (a.action === "confirm_change") {
@@ -96,8 +110,10 @@ function apply(site: Site, lc: LifecycleState, a: LifecycleAction, s: Session, a
     case "settings": {
       requireRole(s, ["eqore"], "change lifecycle settings");
       const note = requireNote(a.note, "change lifecycle settings");
-      if (a.warningDays !== undefined) { need(Number.isInteger(a.warningDays) && a.warningDays >= 0 && a.warningDays <= 365, 400, "warningDays must be an integer 0–365"); lc.warningDays = a.warningDays; }
-      if (a.timezone !== undefined) { need(isValidTimezone(a.timezone), 400, "unknown time zone"); lc.timezone = a.timezone; }
+      if (a.warningDays !== undefined) need(Number.isInteger(a.warningDays) && a.warningDays >= 0 && a.warningDays <= 365, 400, "warningDays must be an integer 0–365");
+      if (a.timezone !== undefined) need(isValidTimezone(a.timezone), 400, "unknown time zone");
+      if (a.warningDays !== undefined) lc.warningDays = a.warningDays;
+      if (a.timezone !== undefined) lc.timezone = a.timezone;
       lc.settingsHistory.push({ at, by: s.name, timezone: lc.timezone, warningDays: lc.warningDays, note });
       return { warningDays: lc.warningDays, timezone: lc.timezone };
     }
@@ -116,8 +132,8 @@ function apply(site: Site, lc: LifecycleState, a: LifecycleAction, s: Session, a
         responsible: text(a.responsible, 160) || "Facility operator + EQORE field service", reviewer: "engineer", reviewTriggers: [],
         createdAt: at, updatedAt: at, history: [{ at, by: s.name, byId: s.userId, action: "created", detail: `Project-specific obligation: ${note}` }],
       };
-      lc.obligations.push(ob);
       if (a.dueDate !== undefined) setDue(lc, ob, s, at, a.dueDate, a.warningDays, note);
+      lc.obligations.push(ob);
       return { obligation: ob };
     }
     case "set_due": {

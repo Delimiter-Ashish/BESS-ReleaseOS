@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 /** Emergency Access / Site QR (signed-in users): each code opens the public first-responder page (/p/:id), which shows only engineer-published documents. */
 export default async function QrAccess() {
-  const session = getSession();
+  const session = await getSession();
   if (session.role === "public") {
     return (
       <Page>
@@ -20,7 +20,7 @@ export default async function QrAccess() {
       </Page>
     );
   }
-  const h = headers();
+  const h = await headers();
   const host = process.env.PUBLIC_BASE_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   // EQORE: every site. Other roles: only projects shared with them by the access policy.
   const sites = isInternal(session) ? getSites() : externalScope(session, getSites(), documentRegister).map((x) => x.site);

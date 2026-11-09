@@ -9,7 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Pre-submission check for one package (?templateId=) or all packages. Evidence quotes are shown to EQORE users only. */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
     const session = requireCap(req, "memory"); // derived from internal correspondence: EQORE only
     const site = getSite(params.id);

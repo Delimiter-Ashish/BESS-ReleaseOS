@@ -13,11 +13,13 @@ export const dynamic = "force-dynamic";
 
 const STATUS_CLS = { approved: "bg-emerald-50 text-emerald-700 ring-emerald-200", in_review: "bg-violet-50 text-violet-700 ring-violet-200", uploaded: "bg-violet-50 text-violet-700 ring-violet-200", rejected: "bg-red-50 text-red-700 ring-red-200" } as const;
 
-export default function DocumentPage({ params, searchParams }: { params: { id: string; revId: string }; searchParams: { vs?: string } }) {
+export default async function DocumentPage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ id: string; revId: string }>; searchParams: Promise<{ vs?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const site = getSite(params.id);
   const rev = site?.documents.find((d) => d.id === decodeURIComponent(params.revId));
   if (!site || !rev) notFound();
-  const session = getSession();
+  const session = await getSession();
   const req = REQ_BY_ID[rev.requirementId];
   // Access policy (server-enforced): internal documents are not shown to suppliers, authorities or the public.
   if (!canViewRevision(session, site, rev)) {

@@ -9,8 +9,9 @@ import { documentRegister, revisionProvenance } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
-export default function Inbox({ searchParams }: { searchParams: { project?: string; expect?: string } }) {
-  const s = getSession();
+export default async function Inbox({ searchParams: searchParamsPromise }: { searchParams: Promise<{ project?: string; expect?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const s = await getSession();
   if (!can(s, "upload")) return <Restricted what="The project inbox" role={s.role} />;
   // Suppliers: only projects / document types shared with them, and only their own recent uploads.
   const scope = isInternal(s) ? undefined : externalScope(s, getSites(), documentRegister);

@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
  * (Lifecycle → First-responder publication), and only while each is still the current approved revision with a
  * matching SHA-256. No hard-coded instructions, contacts, internal records, communications or review state.
  */
-export default function PublicEmergencyPage({ params }: { params: { id: string } }) {
+export default async function PublicEmergencyPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const data = publicEmergency(params.id);
   if (!data) notFound();
   const { site, publications } = data;

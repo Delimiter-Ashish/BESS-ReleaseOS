@@ -136,6 +136,13 @@ export type ReleaseState = "current" | "pending_change" | "stale";
 export function releaseStatus(site: Site, release: Release): { state: ReleaseState; reasons: string[] } {
   const reasons: string[] = [];
   let state: ReleaseState = "current";
+  const frozenMemory = (release.snapshot?.annotations?.projectMemory ?? []) as { id: string }[];
+  for (const item of applicableItems(site, release.templateId)) {
+    if (!frozenMemory.some((m) => m.id === item.id)) {
+      state = "stale";
+      reasons.push(`Confirmed requirement not included in this release: ${item.title}`);
+    }
+  }
   for (const it of release.items) {
     const a = latestApproved(site, it.requirementId);
     if (a && a.id !== it.revisionId) {

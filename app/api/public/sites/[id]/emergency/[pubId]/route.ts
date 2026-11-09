@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
  * Public download of ONE explicitly published emergency document. Served only while the publication is active, the
  * revision is still the current approved one, and the stored bytes still hash to the published sha256.
  */
-export async function GET(_req: Request, { params }: { params: { id: string; pubId: string } }) {
+export async function GET(_req: Request, { params: paramsPromise }: { params: Promise<{ id: string; pubId: string }> }) {
+  const params = await paramsPromise;
   return handle(() => {
     const site = getSite(params.id);
     const pub = site?.lifecycle?.publications.find((p) => p.id === params.pubId && p.status === "published");

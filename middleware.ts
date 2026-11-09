@@ -6,4 +6,4 @@ export function middleware(req: NextRequest) {
   headers.set("x-ros-path", req.nextUrl.pathname);
   return NextResponse.next({ request: { headers } });
 }
-export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico|pdf.worker.min.js).*)"] };
+export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico|pdf.worker.min.mjs).*)"] };

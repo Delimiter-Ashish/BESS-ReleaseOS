@@ -14,7 +14,7 @@ function greeting() {
 }
 
 export default async function Today() {
-  const s = getSession();
+  const s = await getSession();
   // Supplier / facility / AHJ / public: only records shared with them by the access policy (no portfolio data at all).
   if (s.role !== "eqore") return <ExternalToday s={s} />;
   const m = todayMetrics();

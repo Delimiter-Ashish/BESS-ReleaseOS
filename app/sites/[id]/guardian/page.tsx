@@ -10,10 +10,12 @@ import { getReleases, getSite } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export default function GuardianPage({ params, searchParams }: { params: { id: string }; searchParams: { template?: string } }) {
+export default async function GuardianPage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ id: string }>; searchParams: Promise<{ template?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const site = getSite(params.id);
   if (!site) notFound();
-  const session = getSession();
+  const session = await getSession();
   if (session.role !== "eqore") return <Restricted what="Project Guardian" role={session.role} />;
   const tpl = TEMPLATE_BY_ID[searchParams.template ?? ""] ? searchParams.template! : "ahj_permit";
   const releases = getReleases(site.id).filter((r) => r.snapshot).sort((a, b) => b.builtAt.localeCompare(a.builtAt))
